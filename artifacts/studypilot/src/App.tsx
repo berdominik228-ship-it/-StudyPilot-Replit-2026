@@ -1,62 +1,275 @@
-import { type ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useEffect, useRef, useState, type ReactNode, type FormEvent } from 'react';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import NotFound from '@/pages/not-found';
+import { useAuth } from '@workspace/replit-auth-web';
 import {
-  Route,
-  Switch,
-  useLocation,
-  Router as WouterRouter,
+  useGetDashboard, useListMaterials, useCreateMaterial, useGetMaterial, useUpdateMaterial, useDeleteMaterial,
+  useAnalyzeMaterial, useListQuizzes, useGenerateQuiz, useGetQuiz, useAnswerQuizQuestion, useFinishQuiz,
+  useListFlashcards, useGenerateFlashcards, useReviewFlashcard, useGetProgress, useListExams, useCreateExam,
+  useDeleteExam, useGetProfile, useUpdateProfile, useRequestUploadUrl,
+  getGetDashboardQueryKey, getListMaterialsQueryKey, getGetMaterialQueryKey, getListQuizzesQueryKey,
+  getGetQuizQueryKey, getListFlashcardsQueryKey, getGetProgressQueryKey, getListExamsQueryKey, getGetProfileQueryKey,
+} from '@workspace/api-client-react';
+import type { StudyMaterial } from '@workspace/api-client-react';
+import {
+  ArrowDownRight, ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Brain, CalendarDays, Check,
+  CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Clock3, FileImage, FileText,
+  Flame, GraduationCap, Layers3, LogOut, Menu, Plus, Search, Settings, Sparkles,
+  Target, Trash2, UploadCloud, X, Zap,
+} from 'lucide-react';
+import {
+  Link, Route, Switch, useLocation, useParams, Router as WouterRouter,
 } from 'wouter';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 20_000, retry: 1 } } });
 
-function Home() {
-  return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-gray-900">
-          Replit Agent is building...
-        </h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Your app will appear here once it's ready.
-        </p>
+const navItems = [
+  { href: '/', label: 'Overview', icon: Target },
+  { href: '/materials', label: 'My materials', icon: BookOpen },
+  { href: '/tests', label: 'Practice tests', icon: Brain },
+  { href: '/flashcards', label: 'Flashcards', icon: Layers3 },
+  { href: '/progress', label: 'Progress', icon: ArrowUpRight },
+  { href: '/exams', label: 'Upcoming exams', icon: CalendarDays },
+];
+
+function Button({ children, onClick, kind = 'primary', type = 'button', disabled = false, className = '', testId }: {
+  children: ReactNode; onClick?: () => void; kind?: 'primary' | 'quiet' | 'outline' | 'danger'; type?: 'button' | 'submit'; disabled?: boolean; className?: string; testId?: string;
+}) {
+  return <button type={type} onClick={onClick} disabled={disabled} data-testid={testId} className={`button button-${kind} ${className}`}>{children}</button>;
+}
+function Card({ children, className = '' }: { children: ReactNode; className?: string }) { return <section className={`panel ${className}`}>{children}</section>; }
+function PageHead({ eyebrow, title, description, action }: { eyebrow?: string; title: string; description?: string; action?: ReactNode }) {
+  return <div className="page-head"><div>{eyebrow && <div className="eyebrow">{eyebrow}</div>}<h1>{title}</h1>{description && <p>{description}</p>}</div>{action}</div>;
+}
+function Loading({ label = 'Loading your study space' }: { label?: string }) {
+  return <div className="state-card" role="status"><div className="skeleton skeleton-line wide" /><div className="skeleton skeleton-line" /><span>{label}</span></div>;
+}
+function ErrorState({ retry }: { retry: () => void }) {
+  return <div className="state-card"><div className="state-icon"><CircleHelp size={21}/></div><b>We couldn’t load this just yet</b><span>Give it another try in a moment.</span><Button kind="outline" onClick={retry}>Try again</Button></div>;
+}
+function EmptyState({ icon: Icon = BookOpen, title, text, action }: { icon?: typeof BookOpen; title: string; text: string; action?: ReactNode }) {
+  return <div className="empty-state"><div className="empty-art"><div className="empty-orbit"/><Icon size={28}/></div><h3>{title}</h3><p>{text}</p>{action}</div>;
+}
+function Shell({ children }: { children: ReactNode }) {
+  const auth = useAuth();
+  const [loc] = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+  return <div className="app-shell">
+    <aside className={`sidebar ${menuOpen ? 'sidebar-open' : ''}`}>
+      <Link href="/" className="brand"><span className="brand-mark"><GraduationCap size={20}/></span><span>study<span className="brand-light">pilot</span></span></Link>
+      <div className="nav-caption">YOUR SPACE</div>
+      <nav className="side-nav">{navItems.map(({ href, label, icon: Icon }) => <Link key={href} href={href} className={`nav-link ${loc === href ? 'nav-active' : ''}`} onClick={() => setMenuOpen(false)}><Icon size={18}/><span>{label}</span>{href === '/flashcards' && <span className="nav-dot"/>}</Link>)}</nav>
+      <div className="sidebar-bottom">
+        <div className="sidebar-tip"><span className="tip-orb"><Sparkles size={15}/></span><b>Small steps add up.</b><span>Make today’s study session count.</span><Link href="/tests" className="tip-link">Start a practice test <ArrowRight size={14}/></Link></div>
+        <Link href="/pricing" className="upgrade-link"><Zap size={16}/> Explore Premium <ArrowUpRight size={14}/></Link>
+        <Link href="/settings" className={`nav-link ${loc === '/settings' ? 'nav-active' : ''}`}><Settings size={18}/><span>Settings</span></Link>
+        <button className="account-chip" onClick={() => auth.logout()} data-testid="button-logout"><span className="avatar">{(auth.user?.firstName?.[0] ?? 'S').toUpperCase()}</span><span className="account-name">{auth.user?.firstName || 'Student'}<small>My account</small></span><LogOut size={15}/></button>
       </div>
+    </aside>
+    <div className="main-column">
+      <header className="topbar"><button className="mobile-menu" onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle navigation"><Menu size={20}/></button><div className="breadcrumb"><span>Study space</span><ChevronRight size={14}/><b>{navItems.find(n => n.href === loc)?.label || loc.split('/').filter(Boolean).at(-1) || 'Overview'}</b></div><div className="topbar-right"><span className="focus-note"><span className="presence"/> Your next step, made clear</span><span className="top-avatar">{(auth.user?.firstName?.[0] ?? 'S').toUpperCase()}</span></div></header>
+      <main className="page-content app-enter">{children}</main>
     </div>
-  );
+  </div>;
 }
+function AppPage({ children }: { children: ReactNode }) { return <Shell>{children}</Shell>; }
+function Landing() {
+  const auth = useAuth();
+  if (auth.isLoading) return <div className="auth-loading"><Loading/></div>;
+  if (auth.isAuthenticated) return <AppPage><Dashboard/></AppPage>;
+  return <div className="landing">
+    <header className="landing-nav"><Link href="/" className="brand"><span className="brand-mark"><GraduationCap size={20}/></span><span>study<span className="brand-light">pilot</span></span></Link><nav><a href="#how-it-works">How it works</a><a href="#built-for-you">For students</a><Link href="/pricing">Pricing</Link></nav><div className="landing-actions"><Button kind="quiet" onClick={auth.login}>Log in</Button><Button onClick={auth.login}>Get started <ArrowRight size={16}/></Button></div></header>
+    <section className="hero">
+      <div className="hero-copy"><div className="hero-pill"><span className="presence"/> YOUR STUDY SIDEKICK</div><h1>Make your notes<br/>work <em>for you.</em></h1><p>Turn class materials into practice that sticks. Get clear feedback, find what needs work, and know exactly what to do next.</p><div className="hero-buttons"><Button onClick={auth.login}>Start studying <ArrowRight size={17}/></Button><a className="text-link" href="#how-it-works">See how it works <ArrowDownRight size={16}/></a></div><div className="hero-proof"><div className="proof-avatars"><span>J</span><span>M</span><span>A</span></div><span>Built for the way <b>you</b> learn</span></div></div>
+      <div className="hero-visual"><div className="hero-visual-wash"/><div className="floating-note note-a"><span className="note-icon lavender"><FileText size={17}/></span><span><b>Biology · Cell structure</b><small>Notes ready to practice</small></span><CheckCircle2 size={17} className="success-icon"/></div><div className="study-card"><div className="study-card-top"><span className="mini-label"><Sparkles size={13}/> YOUR STUDY PLAN</span><span className="more-dots">•••</span></div><div className="plan-title">A little progress<br/>goes a long way.</div><div className="plan-sub">Your next 20 minutes</div><div className="plan-row"><span className="plan-number">01</span><span><b>Review cell structure</b><small>From your Biology notes</small></span><span className="plan-time">8 min</span></div><div className="plan-row"><span className="plan-number violet">02</span><span><b>Try 5 practice questions</b><small>Focus: organelles</small></span><span className="plan-time">12 min</span></div><div className="progress-track"><span style={{width:'62%'}}/></div><div className="plan-footer"><span>YOUR WEEKLY RHYTHM</span><b>4 of 6 sessions</b></div></div><div className="floating-note note-b"><span className="score-ring">82</span><span><b>Nice momentum</b><small>up 11% this week</small></span><ArrowUpRight size={16} className="success-icon"/></div><div className="hero-scribble">one step at a time <ArrowDownRight size={18}/></div></div>
+    </section>
+    <section className="landing-strip"><span>LESS GUESSING</span><i/><span>MORE UNDERSTANDING</span><i/><span>BETTER NEXT STEPS</span></section>
+    <section id="how-it-works" className="landing-section process-section"><div className="section-intro"><span className="eyebrow">A STUDY FLOW THAT MAKES SENSE</span><h2>From “I have notes”<br/>to “I’ve got this.”</h2><p>Your own materials are the starting point. StudyPilot helps you turn them into a study session with direction.</p></div><div className="process-list"><article><span className="process-index">01</span><div><h3>Bring what you’re learning</h3><p>Upload class notes, a worksheet, or paste in text. Your study space starts with your real coursework.</p></div><span className="process-symbol"><UploadCloud size={21}/></span></article><article><span className="process-index">02</span><div><h3>Practice with purpose</h3><p>Build quizzes and flashcards from your material, then get helpful feedback after each answer.</p></div><span className="process-symbol"><Brain size={21}/></span></article><article><span className="process-index">03</span><div><h3>Know what to do next</h3><p>Spot the topics that need another look and make your next study session count.</p></div><span className="process-symbol"><Target size={21}/></span></article></div></section>
+    <section id="built-for-you" className="landing-focus"><div className="focus-graphic"><div className="focus-sun"/><div className="focus-orbit orbit-one"/><div className="focus-orbit orbit-two"/><div className="focus-center"><GraduationCap size={26}/></div><span className="focus-tag tag-top">YOUR NOTES</span><span className="focus-tag tag-right">YOUR PACE</span><span className="focus-tag tag-bottom">YOUR PROGRESS</span></div><div><span className="eyebrow">A MORE HUMAN WAY TO STUDY</span><h2>Supportive by design.<br/><em>Focused on you.</em></h2><p>No noisy feeds or pressure to keep up. Just a calm space to work through your own material, one clear step at a time.</p><div className="focus-points"><span><Check size={16}/> Your class materials stay at the centre</span><span><Check size={16}/> Feedback that helps you learn from mistakes</span><span><Check size={16}/> Progress you can actually act on</span></div><Button onClick={auth.login}>Find your next step <ArrowRight size={16}/></Button></div></section>
+    <section className="landing-quote"><span className="quote-mark">“</span><blockquote>It’s easier to start when you know what to do next.</blockquote><span className="quote-caption">A little clarity can change the whole study session.</span></section>
+    <section className="landing-bottom-cta"><div className="cta-spark"><Sparkles size={20}/></div><span className="eyebrow">YOUR NEXT GOOD STUDY SESSION</span><h2>Start where you are.</h2><p>Bring one set of notes. We’ll help with the next step.</p><Button onClick={auth.login}>Get started for free <ArrowRight size={16}/></Button></section>
+    <footer className="landing-footer"><Link href="/" className="brand"><span className="brand-mark"><GraduationCap size={18}/></span><span>study<span className="brand-light">pilot</span></span></Link><span>Made for learning, not cramming.</span><Link href="/pricing">Pricing</Link></footer>
+  </div>;
+}
+function Dashboard() {
+  const q = useGetDashboard();
+  const d = q.data;
+  if (q.isLoading) return <Loading/>;
+  if (q.isError || !d) return <ErrorState retry={() => q.refetch()}/>;
+  const n = new Date();
+  const greeting = n.getHours() < 12 ? 'Good morning' : n.getHours() < 18 ? 'Good afternoon' : 'Good evening';
+  return <div className="dashboard-page">
+    <PageHead eyebrow="YOUR STUDY SPACE" title={`${greeting}, ${d.userName || 'there'}.`} description="A quick look at where you are — and a helpful next step."/>
+    <div className="dashboard-hero">
+      <div><div className="hero-kicker"><span className="sparkle-chip"><Sparkles size={14}/></span> YOUR NEXT STEP</div><h2>{d.weakTopics?.[0] ? `Revisit ${d.weakTopics[0].topic}` : 'Build a study rhythm that feels good.'}</h2><p>{d.weakTopics?.[0] ? `A short practice round in ${d.weakTopics[0].subject} could help this topic click.` : 'Add a class material and turn it into your first practice session.'}</p><Link href={d.weakTopics?.length ? '/tests' : '/materials'} className="hero-cta">{d.weakTopics?.length ? 'Practice this topic' : 'Add your first material'} <ArrowRight size={16}/></Link></div>
+      <div className="hero-art"><div className="art-circle art-one"/><div className="art-circle art-two"/><div className="art-book"><BookOpen size={35}/></div><span className="art-sticker"><Sparkles size={15}/></span></div>
+    </div>
+    <div className="metric-grid">
+      <Metric label="Materials" value={d.totalMaterials} icon={BookOpen} foot="Your class notes, in one place" tint="blue"/>
+      <Metric label="Practice tests" value={d.totalQuizzes} icon={Brain} foot="Little rounds of learning" tint="violet"/>
+      <Metric label="Average score" value={`${Math.round(d.averageScore)}%`} icon={Target} foot="Progress, not perfection" tint="mint"/>
+      <Metric label="Study streak" value={`${d.studyStreak} days`} icon={Flame} foot="Showing up matters" tint="peach"/>
+    </div>
+    <div className="dashboard-lower">
+      <Card className="recent-panel"><div className="panel-heading"><div><span className="eyebrow">KEEP THE MOMENTUM</span><h2>Pick up where you left off</h2></div><Link href="/materials" className="small-link">All materials <ArrowRight size={14}/></Link></div>
+        {d.recentMaterials?.length ? <div className="recent-list">{d.recentMaterials.slice(0,4).map(m => <Link href={`/materials/${m.id}`} key={m.id} className="recent-item"><span className={`subject-glyph ${subjectTint(m.subject)}`}><FileText size={18}/></span><span className="recent-main"><b>{m.title}</b><small>{m.subject} · {relative(m.updatedAt)}</small></span><ChevronRight size={17}/></Link>)}</div> : <EmptyState title="Your materials will live here" text="Add a class note or worksheet to begin." action={<Link href="/materials" className="small-link">Add a material <ArrowRight size={14}/></Link>}/>}
+      </Card>
+      <Card className="next-panel"><div className="panel-heading"><div><span className="eyebrow">COMING UP</span><h2>Your study snapshot</h2></div><span className="round-icon"><CalendarDays size={17}/></span></div>
+        {d.nextExam ? <div className="next-exam"><div className="exam-date"><b>{new Date(d.nextExam.examDate).getDate()}</b><small>{new Date(d.nextExam.examDate).toLocaleString('en', {month:'short'}).toUpperCase()}</small></div><div><b>{d.nextExam.title}</b><small>{d.nextExam.subject}</small></div></div> : <div className="compact-empty">No exams on your calendar yet.<Link href="/exams">Add an upcoming exam <ArrowRight size={13}/></Link></div>}
+        <div className="snapshot-stats"><div><span><Layers3 size={14}/> Cards due</span><b>{d.flashcardsDue}</b></div><div><span><Zap size={14}/> AI practice this month</span><b>{d.monthlyAiTestsUsed}<small> / {d.monthlyAiTestLimit}</small></b></div></div>
+        <Link href="/progress" className="snapshot-link">See your progress <ArrowRight size={14}/></Link>
+      </Card>
+    </div>
+    <div className="dashboard-bottom"><Card className="weak-panel"><div className="panel-heading"><div><span className="eyebrow">A PLACE TO FOCUS</span><h2>Topics to revisit</h2></div><Link href="/progress" className="small-link">View progress <ArrowRight size={14}/></Link></div>{d.weakTopics?.length ? <div className="topic-rows">{d.weakTopics.slice(0,3).map((t,i) => <div className="topic-row" key={`${t.subject}-${t.topic}`}><span className="topic-rank">0{i+1}</span><div className="topic-name"><b>{t.topic}</b><small>{t.subject} · {t.attempts} attempts</small></div><div className="topic-meter"><span style={{width:`${Math.max(8,t.accuracy)}%`}}/></div><b className="topic-score">{Math.round(t.accuracy)}%</b></div>)}</div> : <div className="compact-empty">Your practice will reveal the topics to focus on. <Link href="/tests">Start a test <ArrowRight size={13}/></Link></div>}</Card><div className="quick-actions"><span className="eyebrow">QUICK START</span><Link href="/tests" className="quick-action"><span className="quick-icon violet"><Brain size={18}/></span><span><b>Take a practice test</b><small>Use your own class materials</small></span><ArrowRight size={16}/></Link><Link href="/flashcards" className="quick-action"><span className="quick-icon blue"><Layers3 size={18}/></span><span><b>Review flashcards</b><small>{d.flashcardsDue} ready when you are</small></span><ArrowRight size={16}/></Link></div></div>
+  </div>;
+}
+function Metric({label,value,icon:Icon,foot,tint}:{label:string;value:string|number;icon:typeof BookOpen;foot:string;tint:string}) { return <Card className="metric-card"><div className={`metric-icon ${tint}`}><Icon size={18}/></div><span className="metric-label">{label}</span><b className="metric-value">{value}</b><small>{foot}</small></Card>; }
+function relative(date:string) { const mins=Math.max(1,Math.floor((Date.now()-new Date(date).getTime())/60000)); return mins<60?`${mins}m ago`:mins<1440?`${Math.floor(mins/60)}h ago`:`${Math.floor(mins/1440)}d ago`; }
+function subjectTint(s:string) { return `tint-${['blue','violet','mint','peach'][s.length%4]}`; }
 
+function Materials() {
+  const q=useListMaterials(), [search,setSearch]=useState(''), [showForm,setShowForm]=useState(false);
+  const items=(q.data||[]).filter(m=>`${m.title} ${m.subject}`.toLowerCase().includes(search.toLowerCase()));
+  return <><PageHead eyebrow="YOUR LIBRARY" title="My materials" description="Class notes and resources, ready to become your next study session." action={<Button onClick={()=>setShowForm(true)}><Plus size={17}/> Add material</Button>}/>
+    {showForm && <MaterialForm onClose={()=>setShowForm(false)}/>}
+    <div className="library-tools"><label className="search-box"><Search size={17}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search your materials" data-testid="input-search-materials"/></label><span className="result-count">{items.length} {items.length===1?'material':'materials'}</span></div>
+    {q.isLoading?<Loading label="Gathering your materials"/>:q.isError?<ErrorState retry={()=>q.refetch()}/>:items.length?<div className="material-grid">{items.map(m=><MaterialCard key={m.id} material={m}/>)}</div>:<EmptyState title={search?'No matches just yet':'Your library starts here'} text={search?'Try a different title or subject.':'Upload a worksheet, add your notes, or paste class text to begin.'} icon={search?Search:BookOpen} action={<Button onClick={()=>setShowForm(true)}><Plus size={16}/> Add a material</Button>}/>}
+  </>;
+}
+function MaterialCard({material:m}:{material:StudyMaterial}) {
+  const del=useDeleteMaterial(), qc=useQueryClient();
+  return <Card className="material-card"><div className="material-card-top"><span className={`file-tile ${subjectTint(m.subject)}`}>{m.contentType?.startsWith('image/')?<FileImage size={19}/>:<FileText size={19}/>}</span><button title="Delete material" className="icon-button" onClick={()=>{if(confirm(`Delete “${m.title}”?`))del.mutate({id:m.id},{onSuccess:()=>qc.invalidateQueries({queryKey:getListMaterialsQueryKey()})})}}><Trash2 size={16}/></button></div><Link href={`/materials/${m.id}`} className="material-card-link"><span className="subject-label">{m.subject}</span><h3>{m.title}</h3><p>{m.summary||m.fileName||'Open material to explore your study notes.'}</p></Link><div className="material-card-foot"><span>{relative(m.updatedAt)}</span><Link href={`/materials/${m.id}`} className="circle-arrow" aria-label={`Open ${m.title}`}><ArrowUpRight size={16}/></Link></div></Card>;
+}
+function MaterialForm({onClose,edit}:{onClose:()=>void;edit?:StudyMaterial}) {
+  const [title,setTitle]=useState(edit?.title||''),[subject,setSubject]=useState(edit?.subject||''),[text,setText]=useState(edit?.contentText||''),[file,setFile]=useState<File|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+  const qc=useQueryClient(), create=useCreateMaterial(), upload=useRequestUploadUrl(), update=useUpdateMaterial();
+  async function submit(e:FormEvent) { e.preventDefault(); setError(''); if(!title.trim()||!subject.trim()){setError('Add a title and subject to continue.');return;} setBusy(true);
+    try {
+      if(edit){await update.mutateAsync({id:edit.id,data:{title,subject,contentText:text,notes:edit.notes||undefined}});await qc.invalidateQueries({queryKey:getGetMaterialQueryKey(edit.id)});}
+      else if(file){const up=await upload.mutateAsync({data:{name:file.name,size:file.size,contentType:file.type||'application/octet-stream'}});const res=await fetch(up.uploadURL,{method:'PUT',headers:{'Content-Type':file.type||'application/octet-stream'},body:file});if(!res.ok)throw new Error('The file could not be uploaded. Try again.');await create.mutateAsync({data:{title,subject,fileName:file.name,contentType:file.type,objectPath:up.objectPath,contentText:file.type==='text/plain'?await file.text():text,notes:''}});}
+      else await create.mutateAsync({data:{title,subject,contentText:text,notes:''}});
+      await qc.invalidateQueries({queryKey:getListMaterialsQueryKey()});await qc.invalidateQueries({queryKey:getGetDashboardQueryKey()});onClose();
+    } catch(err){setError(err instanceof Error?err.message:'We could not save this material. Please try again.');} finally{setBusy(false);}
+  }
+  return <div className="modal-backdrop" role="presentation"><form className="modal material-modal" onSubmit={submit}><div className="modal-heading"><div><span className="eyebrow">{edit?'EDIT MATERIAL':'BUILD YOUR LIBRARY'}</span><h2>{edit?'Update material':'Add a material'}</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Close"><X size={19}/></button></div><p className="modal-desc">Use your own class materials as the starting point for practice.</p>
+     <div className="form-grid"><label className="field full"><span>Title</span><input required value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g. Cells and organelles" data-testid="input-material-title"/></label><label className="field full"><span>Subject</span><input required value={subject} onChange={e=>setSubject(e.target.value)} placeholder="e.g. Biology" data-testid="input-material-subject"/></label>
+     {!edit&&<label className="upload-zone full"><input type="file" accept=".pdf,image/jpeg,image/png,image/webp,.txt,text/plain" onChange={e=>setFile(e.target.files?.[0]||null)} data-testid="input-material-file"/><UploadCloud size={21}/><b>{file?file.name:'Choose a file to upload'}</b><small>PDF, JPG, PNG, WebP, or plain text</small></label>}
+     <label className="field full"><span>{edit?'Study notes':'Or paste your class text'}</span><textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Paste notes, a topic outline, or key details from class…" rows={5} data-testid="input-material-content"/></label></div>
+     <p className="ai-privacy-note" role="note">When you use AI study tools, extracted text and images used for OCR are sent to OpenAI using the configured API key. Avoid adding personal or confidential details.</p>
+    {error&&<div className="inline-error">{error}</div>}<div className="modal-actions"><Button kind="quiet" onClick={onClose}>Cancel</Button><Button type="submit" disabled={busy}>{busy?'Saving…':edit?'Save changes':'Save material'} <ArrowRight size={15}/></Button></div></form></div>;
+}
+function MaterialDetail() {
+  const {id}=useParams<{id:string}>(), [,setLocation]=useLocation(), n=Number(id)||0, q=useGetMaterial(n,{query:{queryKey:getGetMaterialQueryKey(n),enabled:!!n}}), analyze=useAnalyzeMaterial(),[editing,setEditing]=useState(false),[analysis,setAnalysis]=useState<{summary:string;keyTopics:string[];studySuggestion:string}|null>(null);
+  const qc=useQueryClient();
+  if(q.isLoading)return <Loading/>; if(q.isError||!q.data)return <ErrorState retry={()=>q.refetch()}/>;
+  const m=q.data;
+  return <><Link href="/materials" className="back-link"><ArrowLeft size={15}/> All materials</Link><PageHead eyebrow={m.subject} title={m.title} description={`Added ${new Date(m.createdAt).toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'})}`} action={<div className="head-actions"><Button kind="outline" onClick={()=>setEditing(true)}>Edit material</Button><Button onClick={()=>setLocation('/tests')}>Make a practice test <ArrowRight size={15}/></Button></div>}/>
+    {editing&&<MaterialForm edit={m} onClose={()=>setEditing(false)}/>}
+    <div className="detail-grid"><Card className="detail-main"><div className="detail-section-head"><div><span className="eyebrow">YOUR CLASS MATERIAL</span><h2>What you’re working with</h2></div>{m.fileName&&<span className="file-name"><FileText size={14}/>{m.fileName}</span>}</div>
+      {m.contentText?<div className="material-content">{m.contentText}</div>:m.objectPath?<div className="file-preview"><FileText size={29}/><b>{m.fileName||'Uploaded material'}</b><span>Saved in your study library</span><a href={`/api/storage${m.objectPath}`} target="_blank" rel="noreferrer">Open uploaded file <ArrowUpRight size={14}/></a></div>:<div className="compact-empty">No text has been added to this material yet.</div>}
+      {m.notes&&<div className="notes-block"><span className="eyebrow">YOUR NOTES</span><p>{m.notes}</p></div>}
+    </Card><Card className="analysis-panel"><div className="panel-heading"><div><span className="eyebrow">STUDY INSIGHT</span><h2>A clearer way in</h2></div><span className="round-icon"><Sparkles size={17}/></span></div>
+      {(analysis?.summary||m.summary)?<><p className="analysis-summary">{analysis?.summary||m.summary}</p><div className="topic-chips">{(analysis?.keyTopics||m.keyTopics||[]).map(t=><span key={t}>{t}</span>)}</div>{analysis?.studySuggestion&&<div className="suggestion-box"><b>Try this next</b><span>{analysis.studySuggestion}</span></div>}</>:<div className="analysis-placeholder"><Sparkles size={22}/><p>Get a short summary and key topics to help guide your practice.</p></div>}
+      <Button kind="outline" disabled={analyze.isPending} onClick={()=>analyze.mutate({id:m.id},{onSuccess:a=>{setAnalysis(a);qc.invalidateQueries({queryKey:getGetMaterialQueryKey(m.id)});}})}>{analyze.isPending?'Finding key ideas…':(m.summary||analysis)?'Refresh study insight':'Analyze material'} <ArrowRight size={15}/></Button>
+      {analyze.isError&&<p className="inline-error">Could not analyze this material. Please try again.</p>}
+    </Card></div>
+  </>;
+}
+function Tests() {
+  const [,setLocation]=useLocation();
+  const materials=useListMaterials(), quizzes=useListQuizzes(), generate=useGenerateQuiz(), qc=useQueryClient();
+  const [selected,setSelected]=useState<number[]>([]),[difficulty,setDifficulty]=useState('medium'),[count,setCount]=useState(8),[types,setTypes]=useState<string[]>(['multiple-choice']),[error,setError]=useState('');
+  const mats=materials.data||[];
+  function toggle(id:number){setSelected(selected.includes(id)?selected.filter(x=>x!==id):[...selected,id]);}
+  function submit(){setError('');if(!selected.length){setError('Choose at least one material for your practice test.');return;}if(!types.length){setError('Choose at least one question style.');return;}generate.mutate({data:{materialIds:selected,difficulty:difficulty as 'easy'|'medium'|'hard',questionCount:count,questionTypes:types as ('multiple-choice'|'true-false'|'open-ended')[]}},{onSuccess:quiz=>{qc.invalidateQueries({queryKey:getListQuizzesQueryKey()});setLocation(`/quiz/${quiz.id}`);},onError:()=>setError('We could not create this test. Try another material or try again.')});}
+  return <><PageHead eyebrow="PRACTICE WITH PURPOSE" title="Practice tests" description="Choose what you’re learning. We’ll make a focused round of questions from your materials."/>
+    <div className="quiz-config-layout"><Card className="quiz-config"><div className="step-heading"><span className="step-num">01</span><div><h2>Choose your materials</h2><p>Pick one or more from your library.</p></div></div>
+      {materials.isLoading?<Loading label="Finding your materials"/>:materials.isError?<ErrorState retry={()=>materials.refetch()}/>:mats.length?<div className="select-materials">{mats.map(m=><button onClick={()=>toggle(m.id)} key={m.id} className={`select-material ${selected.includes(m.id)?'selected':''}`} data-testid={`select-material-${m.id}`}><span className={`file-tile ${subjectTint(m.subject)}`}><FileText size={17}/></span><span><b>{m.title}</b><small>{m.subject}</small></span><span className="select-check">{selected.includes(m.id)&&<Check size={14}/>}</span></button>)}</div>:<EmptyState title="Add a material first" text="Practice tests are made from the materials in your library." action={<Link href="/materials" className="small-link">Go to materials <ArrowRight size={14}/></Link>}/>}
+      {mats.length>0&&<><div className="config-rule"/><div className="config-row"><div><b>Question count</b><small>Choose a short or longer round</small></div><select value={count} onChange={e=>setCount(Number(e.target.value))} data-testid="select-question-count">{[3,5,8,10,15,20].map(v=><option key={v} value={v}>{v} questions</option>)}</select></div><div className="config-row"><div><b>Difficulty</b><small>Set a comfortable challenge</small></div><select value={difficulty} onChange={e=>setDifficulty(e.target.value)} data-testid="select-difficulty"><option value="easy">Warm-up</option><option value="medium">Steady practice</option><option value="hard">Stretch yourself</option></select></div><div className="config-row type-row"><div><b>Question styles</b><small>Choose what to practise</small></div><div className="type-options">{['multiple-choice','true-false','open-ended'].map(t=><button key={t} className={`type-chip ${types.includes(t)?'type-selected':''}`} onClick={()=>setTypes(types.includes(t)?types.filter(x=>x!==t):[...types,t])}>{t==='multiple-choice'?'Multiple choice':t==='true-false'?'True / false':'Open ended'}</button>)}</div></div>{error&&<div className="inline-error">{error}</div>}<Button onClick={submit} disabled={generate.isPending||!mats.length} className="full-button">{generate.isPending?'Putting your test together…':'Create practice test'} <ArrowRight size={16}/></Button></>}
+    </Card><aside className="quiz-aside"><div className="quiz-aside-art"><div className="aside-spark"><Sparkles size={18}/></div><div className="aside-question">Q</div><div className="aside-tick"><Check size={15}/></div></div><span className="eyebrow">A GOOD WAY TO START</span><h3>Practice makes the next step clearer.</h3><p>After each question, you’ll see helpful feedback and a short explanation.</p><div className="aside-fact"><Clock3 size={16}/><span>Most rounds take 5–10 minutes</span></div></aside></div>
+    <section className="quiz-history"><div className="panel-heading"><div><span className="eyebrow">YOUR PRACTICE</span><h2>Recent tests</h2></div></div>
+      {quizzes.isLoading?<Loading/>:quizzes.isError?<ErrorState retry={()=>quizzes.refetch()}/>:quizzes.data?.length?<div className="history-list">{quizzes.data.slice(0,6).map(q=><Link className="history-row" href={`/quiz/${q.id}`} key={q.id}><span className="history-icon"><Brain size={17}/></span><span><b>{q.title}</b><small>{q.subject} · {q.questionCount} questions · {q.difficulty}</small></span><span className="history-score">{q.scorePercentage==null?'Continue':`${Math.round(q.scorePercentage)}%`}</span><ChevronRight size={16}/></Link>)}</div>:<p className="compact-empty">Your completed and in-progress tests will show up here.</p>}
+    </section>
+  </>;
+}
+function QuizRun() {
+  const {id}=useParams<{id:string}>(), quizId=Number(id)||0, q=useGetQuiz(quizId,{query:{queryKey:getGetQuizQueryKey(quizId),enabled:!!quizId}}), answer=useAnswerQuizQuestion(), finish=useFinishQuiz(), qc=useQueryClient();
+  const [index,setIndex]=useState(0),[feedback,setFeedback]=useState<Record<string,{isCorrect:boolean;correctAnswer:string;explanation:string}>>({}),[response,setResponse]=useState(''),[result,setResult]=useState<{scorePercentage:number;correctCount:number;questionCount:number;weakTopics:string[]}|null>(null),[err,setErr]=useState('');
+  if(q.isLoading)return <Loading label="Preparing your practice test"/>;if(q.isError||!q.data)return <ErrorState retry={()=>q.refetch()}/>;
+  const quiz=q.data, question=quiz.questions[index], done=!!quiz.completedAt||!!result;
+  async function sendAnswer(){if(!question||!response.trim())return;setErr('');try{const f=await answer.mutateAsync({id:quizId,data:{questionId:question.id,answer:response.trim()}});setFeedback(old=>({...old,[question.id]:f}));setResponse('');await qc.invalidateQueries({queryKey:getGetQuizQueryKey(quizId)});}catch{setErr('We could not check that answer. Please try again.');}}
+  async function finishNow(){try{const r=await finish.mutateAsync({id:quizId});setResult(r);await qc.invalidateQueries({queryKey:getGetQuizQueryKey(quizId)});await qc.invalidateQueries({queryKey:getListQuizzesQueryKey()});await qc.invalidateQueries({queryKey:getGetProgressQueryKey()});await qc.invalidateQueries({queryKey:getGetDashboardQueryKey()});}catch{setErr('Could not save your result. Please try again.');}}
+  if(done)return <div className="result-wrap"><Link href="/tests" className="back-link"><ArrowLeft size={15}/> Back to practice tests</Link><div className="result-hero"><div className="result-medal"><CheckCircle2 size={33}/></div><span className="eyebrow">ROUND COMPLETE</span><h1>You showed up.<br/><em>That’s progress.</em></h1><div className="result-score">{Math.round(result?.scorePercentage??quiz.scorePercentage??0)}<small>%</small></div><p>{result?.correctCount??'Your'} of {result?.questionCount??quiz.questionCount} answers correct</p></div><Card className="result-detail"><div className="panel-heading"><div><span className="eyebrow">WHAT TO DO NEXT</span><h2>Keep the learning going</h2></div></div>{(result?.weakTopics?.length||quiz.questions.some(x=>x.isCorrect===false))?<div className="result-topics">{(result?.weakTopics||quiz.questions.filter(x=>x.isCorrect===false).map(x=>x.topic)).slice(0,4).map(t=><span key={t}>{t}</span>)}</div>:<p className="compact-empty">No specific topics flagged this round. Nice work.</p>}<div className="head-actions"><Link href="/tests" className="button button-primary">Try another round <ArrowRight size={15}/></Link><Link href="/progress" className="button button-outline">View progress</Link></div></Card></div>;
+  const fb=question?feedback[question.id]:null;
+  return <div className="quiz-run"><Link href="/tests" className="back-link"><ArrowLeft size={15}/> Leave test</Link><div className="quiz-run-head"><span className="eyebrow">{quiz.subject} · {quiz.difficulty}</span><h1>{quiz.title}</h1><span className="question-count">Question {index+1} <i/> {quiz.questionCount}</span></div><div className="quiz-progress"><span style={{width:`${((index+(fb?1:0))/quiz.questionCount)*100}%`}}/></div><Card className="question-card"><div className="question-top"><span>QUESTION {String(index+1).padStart(2,'0')}</span><span>{question.topic}</span></div><h2>{question.prompt}</h2>{question.type==='multiple-choice'||question.type==='true-false'?<div className="answer-options">{question.choices.map((c,i)=><button key={c} disabled={!!fb} className={`answer-option ${response===c?'answer-selected':''} ${fb&&c===fb.correctAnswer?'answer-correct':''} ${fb&&response===c&&!fb.isCorrect?'answer-wrong':''}`} onClick={()=>setResponse(c)}><span className="option-letter">{String.fromCharCode(65+i)}</span>{c}{fb&&c===fb.correctAnswer&&<CheckCircle2 size={17}/>}</button>)}</div>:<label className="field answer-field"><span>Your answer</span><textarea rows={4} value={response} onChange={e=>setResponse(e.target.value)} disabled={!!fb} placeholder="Write your thoughts in a sentence or two…"/></label>}
+      {fb&&<div className={`feedback-box ${fb.isCorrect?'feedback-good':'feedback-revisit'}`}><div className="feedback-title">{fb.isCorrect?<CheckCircle2 size={18}/>:<CircleHelp size={18}/>}<b>{fb.isCorrect?'That’s right.':'A useful one to revisit.'}</b></div><p>{fb.explanation}</p>{!fb.isCorrect&&<small>Answer: {fb.correctAnswer}</small>}</div>}
+      {err&&<div className="inline-error">{err}</div>}<div className="question-actions">{fb?<><Button kind="quiet" onClick={finishNow} disabled={finish.isPending}>Finish round</Button><Button onClick={()=>{setIndex(Math.min(index+1,quiz.questionCount-1));setResponse('');}} disabled={index>=quiz.questionCount-1}>Next question <ArrowRight size={15}/></Button></>:<Button onClick={sendAnswer} disabled={!response.trim()||answer.isPending}>{answer.isPending?'Checking your answer…':'Check answer'} <ArrowRight size={15}/></Button>}</div></Card><div className="quiz-run-foot"><span><Sparkles size={14}/> Every answer is a chance to learn.</span>{index===quiz.questionCount-1&&fb&&<Button kind="outline" onClick={finishNow} disabled={finish.isPending}>{finish.isPending?'Saving…':'Finish and see results'}</Button>}</div></div>;
+}
+function Flashcards() {
+  const q=useListFlashcards(), materials=useListMaterials(), gen=useGenerateFlashcards(), review=useReviewFlashcard(), qc=useQueryClient();
+  const [idx,setIdx]=useState(0),[revealed,setRevealed]=useState(false),[selectedMaterial,setSelectedMaterial]=useState(''),[count,setCount]=useState(10),[error,setError]=useState('');
+  const cards=q.data||[], card=cards[idx];
+  function rate(rating:'easy'|'hard'){if(!card)return;review.mutate({id:card.id,data:{rating}},{onSuccess:()=>{setRevealed(false);setIdx(i=>i+1<cards.length?i+1:0);qc.invalidateQueries({queryKey:getListFlashcardsQueryKey()});qc.invalidateQueries({queryKey:getGetDashboardQueryKey()});},onError:()=>setError('Could not save your review. Try again.')});}
+  function generate(){setError('');if(!selectedMaterial){setError('Choose a material to make flashcards from.');return;}gen.mutate({data:{materialId:Number(selectedMaterial),count}},{onSuccess:()=>{qc.invalidateQueries({queryKey:getListFlashcardsQueryKey()});setIdx(0);},onError:()=>setError('Could not create flashcards from that material.')});}
+  return <><PageHead eyebrow="RECALL, AT YOUR PACE" title="Flashcards" description="A small, active-recall session can help ideas stick."/>
+    {q.isLoading?<Loading label="Getting your flashcards ready"/>:q.isError?<ErrorState retry={()=>q.refetch()}/>:cards.length? <div className="flashcard-layout"><div className="flashcard-column"><div className="flashcard-topline"><span>{idx+1} <i/> {cards.length} cards</span><span className={`difficulty-tag ${card?.difficulty}`}>{card?.difficulty||'new'}</span></div><button className={`flashcard ${revealed?'is-revealed':''}`} onClick={()=>setRevealed(!revealed)} data-testid="button-reveal-flashcard"><span className="flashcard-face-label">{revealed?'THE ANSWER':'QUICK RECALL'}</span><span className="flashcard-copy">{revealed?card?.answer:card?.question}</span><span className="flip-hint">{revealed?'Tap to see the question':'Tap to reveal the answer'}</span></button>{revealed?<div className="review-actions"><Button kind="outline" disabled={review.isPending} onClick={()=>rate('hard')}><ArrowDownRight size={16}/> Needs another look</Button><Button onClick={()=>rate('easy')} disabled={review.isPending}><Check size={16}/> Felt easy</Button></div>:<div className="flashcard-controls"><button className="icon-button" onClick={()=>{setIdx(Math.max(0,idx-1));setRevealed(false)}} aria-label="Previous card"><ChevronLeft size={18}/></button><span>Think it through before revealing</span><button className="icon-button" onClick={()=>{setIdx((idx+1)%cards.length);setRevealed(false)}} aria-label="Next card"><ChevronRight size={18}/></button></div>}{error&&<div className="inline-error">{error}</div>}</div><aside className="flashcard-side"><Card><span className="eyebrow">A LITTLE AND OFTEN</span><h3>Try to recall before you flip.</h3><p>Making an effort to remember helps you notice what you know and what needs another look.</p><div className="flashcard-stat"><span>Reviewed in this session</span><b>{idx}</b></div><div className="flashcard-stat"><span>Times reviewed</span><b>{card?.reviewCount||0}</b></div></Card></aside></div>:<div className="flashcard-empty-wrap"><EmptyState icon={Layers3} title="Ready when you are" text="Create a set from your class materials, then review cards at your own pace."/><Card className="generate-cards"><span className="eyebrow">MAKE A NEW SET</span><h3>Choose a material</h3><div className="generation-fields"><select value={selectedMaterial} onChange={e=>setSelectedMaterial(e.target.value)} data-testid="select-flashcard-material"><option value="">Select a material</option>{(materials.data||[]).map(m=><option value={m.id} key={m.id}>{m.title} · {m.subject}</option>)}</select><select value={count} onChange={e=>setCount(Number(e.target.value))}><option value={4}>4 cards</option><option value={8}>8 cards</option><option value={10}>10 cards</option><option value={15}>15 cards</option><option value={20}>20 cards</option><option value={30}>30 cards</option></select></div>{error&&<div className="inline-error">{error}</div>}<Button onClick={generate} disabled={gen.isPending||materials.isLoading}>{gen.isPending?'Creating your cards…':'Create flashcards'} <ArrowRight size={15}/></Button></Card></div>}
+  </>;
+}
+function Progress() {
+  const q=useGetProgress(), p=q.data;
+  if(q.isLoading)return <Loading/>;if(q.isError||!p)return <ErrorState retry={()=>q.refetch()}/>;
+  const trend=p.scoreTrend||[], max=Math.max(100,...trend.map(x=>x.score));
+  return <><PageHead eyebrow="YOUR LEARNING, OVER TIME" title="Progress" description="Notice the steps you’ve taken, and find the next topic to strengthen."/>
+    <div className="progress-metrics"><Metric label="Average score" value={`${Math.round(p.averageScore)}%`} icon={Target} foot={`${p.completedQuizzes} completed rounds`} tint="blue"/><Metric label="Study streak" value={`${p.studyStreak} days`} icon={Flame} foot="A steady rhythm, your way" tint="peach"/><Metric label="Materials" value={p.totalMaterials} icon={BookOpen} foot="Your learning foundations" tint="violet"/><Metric label="Cards mastered" value={p.masteredFlashcards} icon={Layers3} foot={`${p.flashcardsDue} due for another look`} tint="mint"/></div>
+    <div className="progress-content"><Card className="trend-card"><div className="panel-heading"><div><span className="eyebrow">SCORE TREND</span><h2>Your practice over time</h2></div><span className="trend-key"><i/> Score</span></div>{trend.length?<div className="chart-wrap"><div className="chart-ylabels"><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div><div className="chart"><div className="chart-grid"><i/><i/><i/><i/><i/></div><div className="chart-bars">{trend.slice(-12).map((point,i)=><div className="chart-bar-wrap" key={`${point.date}-${i}`} title={`${point.subject}: ${point.score}%`}><div className="chart-bar" style={{height:`${Math.max(4,(point.score/max)*100)}%`}}/><small>{new Date(point.date).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</small></div>)}</div></div></div>:<EmptyState icon={ArrowUpRight} title="Your progress takes shape here" text="Complete a practice test and your score trend will appear."/>}</Card>
+      <Card className="weak-topics-card"><div className="panel-heading"><div><span className="eyebrow">WHERE A LITTLE MORE PRACTICE HELPS</span><h2>Topics to revisit</h2></div><span className="round-icon"><Target size={17}/></span></div>{p.weakTopics?.length?<div className="topic-rows">{p.weakTopics.map((t,i)=><div className="topic-row" key={`${t.topic}-${i}`}><span className="topic-rank">0{i+1}</span><div className="topic-name"><b>{t.topic}</b><small>{t.subject} · {t.attempts} attempts</small></div><div className="topic-meter"><span style={{width:`${Math.max(8,t.accuracy)}%`}}/></div><b className="topic-score">{Math.round(t.accuracy)}%</b></div>)}</div>:<EmptyState title="No weak topics to show yet" text="Keep practicing and we’ll highlight where another look may help."/>}</Card>
+    </div>
+  </>;
+}
+function Exams() {
+  const q=useListExams(), create=useCreateExam(), del=useDeleteExam(), qc=useQueryClient();
+  const [open,setOpen]=useState(false),[title,setTitle]=useState(''),[subject,setSubject]=useState(''),[date,setDate]=useState(''),[error,setError]=useState('');
+  function submit(e:FormEvent){e.preventDefault();setError('');create.mutate({data:{title,subject,examDate:new Date(`${date}T12:00:00`).toISOString()}},{onSuccess:()=>{qc.invalidateQueries({queryKey:getListExamsQueryKey()});qc.invalidateQueries({queryKey:getGetDashboardQueryKey()});setOpen(false);setTitle('');setSubject('');setDate('');},onError:()=>setError('Could not add this exam. Check the details and try again.')});}
+  const exams=(q.data||[]).slice().sort((a,b)=>new Date(a.examDate).getTime()-new Date(b.examDate).getTime());
+  return <><PageHead eyebrow="PLAN AHEAD, STRESS A LITTLE LESS" title="Upcoming exams" description="Put important dates in one place so your study time has a direction." action={<Button onClick={()=>setOpen(true)}><Plus size={17}/> Add an exam</Button>}/>
+    {open&&<div className="modal-backdrop"><form className="modal" onSubmit={submit}><div className="modal-heading"><div><span className="eyebrow">SAVE THE DATE</span><h2>Add an upcoming exam</h2></div><button type="button" className="icon-button" onClick={()=>setOpen(false)}><X size={18}/></button></div><label className="field"><span>Exam title</span><input required value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g. End-of-term assessment"/></label><label className="field"><span>Subject</span><input required value={subject} onChange={e=>setSubject(e.target.value)} placeholder="e.g. History"/></label><label className="field"><span>Date</span><input required type="date" value={date} onChange={e=>setDate(e.target.value)} min={new Date().toISOString().slice(0,10)}/></label>{error&&<div className="inline-error">{error}</div>}<div className="modal-actions"><Button kind="quiet" onClick={()=>setOpen(false)}>Cancel</Button><Button type="submit" disabled={create.isPending}>{create.isPending?'Saving…':'Add to calendar'} <ArrowRight size={15}/></Button></div></form></div>}
+    {q.isLoading?<Loading/>:q.isError?<ErrorState retry={()=>q.refetch()}/>:exams.length?<div className="exam-list">{exams.map(e=>{const d=new Date(e.examDate),days=Math.ceil((d.getTime()-Date.now())/86400000);return <Card className="exam-card" key={e.id}><div className="exam-date large"><b>{d.getDate()}</b><small>{d.toLocaleString('en',{month:'short'}).toUpperCase()}</small></div><div className="exam-details"><span className="subject-label">{e.subject}</span><h3>{e.title}</h3><small>{days<0?'Date passed':days===0?'Today':days===1?'Tomorrow':`${days} days to go`}</small></div><div className="exam-actions"><Link href="/materials" className="small-link">Study materials <ArrowRight size={14}/></Link><button className="icon-button" title="Delete exam" onClick={()=>{if(confirm(`Remove “${e.title}” from your calendar?`))del.mutate({id:e.id},{onSuccess:()=>{qc.invalidateQueries({queryKey:getListExamsQueryKey()});qc.invalidateQueries({queryKey:getGetDashboardQueryKey()})}})}}><Trash2 size={16}/></button></div></Card>})}</div>:<EmptyState icon={CalendarDays} title="No upcoming exams yet" text="Add a date to make it easier to plan your study sessions." action={<Button onClick={()=>setOpen(true)}><Plus size={16}/> Add an exam</Button>}/>}
+  </>;
+}
+function SettingsPage() {
+  const q=useGetProfile(), update=useUpdateProfile(),qc=useQueryClient(),[name,setName]=useState(''),[grade,setGrade]=useState(''),[message,setMessage]=useState(''),initialized=useRef(false);
+  useEffect(()=>{if(q.data&&!initialized.current){initialized.current=true;setName(q.data.displayName||'');setGrade(q.data.gradeLevel||'');}},[q.data]);
+  if(q.isLoading)return <Loading/>;if(q.isError||!q.data)return <ErrorState retry={()=>q.refetch()}/>;
+  function submit(e:FormEvent){e.preventDefault();setMessage('');update.mutate({data:{displayName:name,gradeLevel:grade||null}},{onSuccess:()=>{setMessage('Your settings are saved.');qc.setQueryData(getGetProfileQueryKey(),{displayName:name,gradeLevel:grade||null});qc.invalidateQueries({queryKey:getGetDashboardQueryKey()})},onError:()=>setMessage('We could not save your settings. Try again.')});}
+  return <><PageHead eyebrow="MAKE IT YOURS" title="Settings" description="A few details help make your study space feel like yours."/><div className="settings-layout"><Card className="settings-card"><div className="settings-intro"><span className="settings-avatar">{name.trim()?.[0]?.toUpperCase()||'S'}</span><div><span className="eyebrow">STUDENT PROFILE</span><h2>Your details</h2></div></div><form onSubmit={submit}><label className="field"><span>Display name</span><input value={name} maxLength={100} onChange={e=>setName(e.target.value)} placeholder="What should we call you?" required data-testid="input-display-name"/></label><label className="field"><span>Year or grade level <small>optional</small></span><input value={grade} maxLength={30} onChange={e=>setGrade(e.target.value)} placeholder="e.g. Year 11"/></label>{message&&<div className={message.includes('not')?'inline-error':'success-note'}>{message}</div>}<Button type="submit" disabled={update.isPending}>{update.isPending?'Saving…':'Save settings'} <Check size={15}/></Button></form></Card><Card className="settings-note"><span className="round-icon"><Sparkles size={18}/></span><span className="eyebrow">YOUR SPACE, YOUR PACE</span><h3>StudyPilot is here to support your learning.</h3><p>Your class materials are the source for your practice. Add them when you’re ready, and come back whenever it helps.</p><Link href="/materials" className="small-link">Go to my materials <ArrowRight size={14}/></Link></Card></div></>;
+}
+function Pricing() {
+  const auth=useAuth(),[,setLocation]=useLocation();
+  return <div className="pricing-page"><PageHead eyebrow="SIMPLE, CLEAR PRICING" title="More room to keep learning." description="Start with the essentials. Choose what feels right for you."/><div className="pricing-grid"><Card className="price-card"><span className="eyebrow">FREE</span><h2>Start your study rhythm.</h2><p className="price-amount">€0 <small>forever</small></p><p className="price-desc">Everything you need to get started with your own materials.</p><ul><li><Check size={15}/> Save and organize materials</li><li><Check size={15}/> Create practice tests</li><li><Check size={15}/> Review flashcards</li><li><Check size={15}/> Track your progress</li></ul><Button kind="outline" onClick={auth.isAuthenticated?()=>setLocation('/'):auth.login}>{auth.isAuthenticated?'Go to your study space':'Get started for free'} <ArrowRight size={15}/></Button></Card><Card className="price-card premium-card"><span className="popular-label"><Sparkles size={13}/> A LITTLE EXTRA ROOM</span><span className="eyebrow">PREMIUM</span><h2>For a deeper study routine.</h2><p className="price-amount">€4.99 <small>/ month</small></p><p className="price-desc">More practice capacity for when your learning takes off.</p><ul><li><Check size={15}/> Everything in Free</li><li><Check size={15}/> Higher monthly AI practice limit</li><li><Check size={15}/> Keep building your study habit</li></ul><Button disabled kind="outline">Payment not enabled</Button><div className="payment-note"><CircleHelp size={14}/> Payments are not enabled yet. No charges can be made.</div></Card></div><p className="pricing-footnote">Premium is shown for planning only. Payment is currently inactive.</p></div>;
+}
+function AuthRedirect({mode}:{mode:'sign-in'|'sign-up'}) { const auth=useAuth();return <div className="auth-page"><Link href="/" className="brand"><span className="brand-mark"><GraduationCap size={20}/></span><span>study<span className="brand-light">pilot</span></span></Link><div className="auth-card"><div className="auth-mark"><GraduationCap size={25}/></div><span className="eyebrow">YOUR STUDY SPACE AWAITS</span><h1>{mode==='sign-up'?'Create your study space':'Welcome back'}</h1><p>Sign in securely to continue learning with your own materials.</p><Button onClick={auth.login}>{mode==='sign-up'?'Continue to create account':'Continue to sign in'} <ArrowRight size={15}/></Button><small>Account access is handled securely by your sign-in provider.</small></div><Link href="/" className="auth-back"><ArrowLeft size={14}/> Back to StudyPilot</Link></div>; }
+function NotFound() { return <AppPage><div className="not-found"><span className="eyebrow">A LITTLE OFF COURSE</span><h1>We can’t find that page.</h1><p>Let’s get you back to your study space.</p><Link href="/" className="button button-primary">Back to overview <ArrowRight size={15}/></Link></div></AppPage>; }
+function RoutedErrorBoundary({children}:{children:ReactNode}) { const [location]=useLocation();return <ErrorBoundary resetKey={location}>{children}</ErrorBoundary>; }
 function Router() {
-  return (
-    // Keep a shared shell (sidebar, navbar) outside the boundary so it
-    // survives a page crash.
-    <RoutedErrorBoundary>
-      <Switch>
-        <Route path="/" component={Home} />
-        <Route component={NotFound} />
-      </Switch>
-    </RoutedErrorBoundary>
-  );
+  const auth=useAuth();
+  if(auth.isLoading)return <div className="auth-loading"><Loading/></div>;
+  return <RoutedErrorBoundary><Switch>
+    <Route path="/" component={Landing}/>
+    <Route path="/materials"><AppPage><Materials/></AppPage></Route>
+    <Route path="/materials/:id"><AppPage><MaterialDetail/></AppPage></Route>
+    <Route path="/tests"><AppPage><Tests/></AppPage></Route>
+    <Route path="/quiz/:id"><AppPage><QuizRun/></AppPage></Route>
+    <Route path="/flashcards"><AppPage><Flashcards/></AppPage></Route>
+    <Route path="/progress"><AppPage><Progress/></AppPage></Route>
+    <Route path="/exams"><AppPage><Exams/></AppPage></Route>
+    <Route path="/settings"><AppPage><SettingsPage/></AppPage></Route>
+    <Route path="/pricing"><Pricing/></Route>
+    <Route path="/sign-in"><AuthRedirect mode="sign-in"/></Route>
+    <Route path="/sign-up"><AuthRedirect mode="sign-up"/></Route>
+    <Route component={NotFound}/>
+  </Switch></RoutedErrorBoundary>;
 }
-
-function RoutedErrorBoundary({ children }: { children: ReactNode }) {
-  const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}>{children}</ErrorBoundary>;
-}
-
-function App() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <Router />
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
-  );
-}
-
+function App() { return <QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/,'')}><Router/></WouterRouter><Toaster/></TooltipProvider></QueryClientProvider>; }
 export default App;

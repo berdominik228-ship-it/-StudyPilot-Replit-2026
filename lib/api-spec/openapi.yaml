@@ -3,13 +3,31 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: StudyPilot learning, materials, quiz and progress API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Browser authentication
+  - name: dashboard
+    description: Study dashboard summaries
+  - name: materials
+    description: User study materials
+  - name: quizzes
+    description: AI-generated practice quizzes and results
+  - name: flashcards
+    description: AI-generated flashcards and review
+  - name: progress
+    description: Learning progress and recommendations
+  - name: exams
+    description: Upcoming tests and exams
+  - name: profile
+    description: Student profile and settings
+  - name: storage
+    description: Private file uploads
 paths:
   /healthz:
     get:
@@ -24,13 +42,864 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /auth/user:
+    get:
+      operationId: getCurrentAuthUser
+      tags: [auth]
+      summary: Get the currently authenticated user
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationSessionHeader"
+        - $ref: "#/components/parameters/SessionCookie"
+      responses:
+        "200":
+          description: Auth status resolved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUserEnvelope"
+  /login:
+    get:
+      operationId: beginBrowserLogin
+      tags: [auth]
+      summary: Start the browser OIDC login flow
+      parameters:
+        - name: returnTo
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to the authentication provider.
+  /callback:
+    get:
+      operationId: handleBrowserLoginCallback
+      tags: [auth]
+      summary: Complete the browser login flow
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect after login.
+  /logout:
+    get:
+      operationId: logoutBrowserSession
+      tags: [auth]
+      summary: Clear the browser session
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationSessionHeader"
+        - $ref: "#/components/parameters/SessionCookie"
+        - name: returnTo
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect after logout.
+  /mobile-auth/token-exchange:
+    post:
+      operationId: exchangeMobileAuthorizationCode
+      tags: [auth]
+      summary: Exchange an OIDC authorization code for a mobile session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobileTokenExchangeRequest"
+      responses:
+        "200":
+          description: Mobile session created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobileTokenExchangeSuccess"
+        "400":
+          description: Invalid exchange request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "401":
+          description: Authorization code rejected.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /mobile-auth/logout:
+    post:
+      operationId: logoutMobileSession
+      tags: [auth]
+      summary: Clear a mobile session
+      parameters:
+        - $ref: "#/components/parameters/AuthorizationSessionHeader"
+      responses:
+        "200":
+          description: Logout processed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogoutSuccess"
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [dashboard]
+      summary: Get the student's dashboard overview
+      responses:
+        "200":
+          description: Dashboard summary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+  /materials:
+    get:
+      operationId: listMaterials
+      tags: [materials]
+      summary: List the student's saved materials
+      responses:
+        "200":
+          description: Study materials.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StudyMaterial"
+    post:
+      operationId: createMaterial
+      tags: [materials]
+      summary: Save a text or uploaded study material
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MaterialInput"
+      responses:
+        "201":
+          description: Material saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudyMaterial"
+        "400":
+          description: Invalid material.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /materials/{id}:
+    get:
+      operationId: getMaterial
+      tags: [materials]
+      summary: Get one saved material
+      parameters:
+        - $ref: "#/components/parameters/EntityId"
+      responses:
+        "200":
+          description: Study material.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudyMaterial"
+        "404":
+          description: Material not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    patch:
+      operationId: updateMaterial
+      tags: [materials]
+      summary: Update a saved material
+      parameters:
+        - $ref: "#/components/parameters/EntityId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MaterialUpdate"
+      responses:
+        "200":
+          description: Updated material.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudyMaterial"
+        "404":
+          description: Material not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    delete:
+      operationId: deleteMaterial
+      tags: [materials]
+      summary: Delete a saved material
+      parameters:
+        - $ref: "#/components/parameters/EntityId"
+      responses:
+        "204":
+          description: Material deleted.
+        "404":
+          description: Material not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /materials/{id}/analyze:
+    post:
+      operationId: analyzeMaterial
+      tags: [materials]
+      summary: Generate a study summary and key topics
+      parameters:
+        - $ref: "#/components/parameters/EntityId"
+      responses:
+        "200":
+          description: AI-generated study analysis.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialAnalysis"
+        "404":
+          description: Material not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /quizzes:
+    get:
+      operationId: listQuizzes
+      tags: [quizzes]
+      summary: List recent quiz sessions
+      responses:
+        "200":
+          description: Quiz sessions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuizSummary"
+  /quizzes/generate:
+    post:
+      operationId: generateQuiz
+      tags: [quizzes]
+      summary: Generate a quiz from saved materials
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuizGenerationInput"
+      responses:
+        "201":
+          description: Quiz generated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizSession"
+        "400":
+          description: Invalid quiz settings or insufficient material text.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "503":
+          description: AI provider is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /quizzes/{id}:
+    get:
+      operationId: getQuiz
+      tags: [quizzes]
+      summary: Get a quiz session and answered questions
+      parameters:
+        - $ref: "#/components/parameters/EntityId"
+      responses:
+        "200":
+          description: Quiz session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizSession"
+        "404":
+          description: Quiz not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /quizzes/{id}/answers:
+    post:
+      operationId: answerQuizQuestion
+      tags: [quizzes]
+      summary: Check an answer and return an explanation
+      parameters:
+        - $ref: "#/components/parameters/EntityId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuizAnswerInput"
+      responses:
+        "200":
+          description: Answer feedback.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizAnswerFeedback"
+        "404":
+          description: Quiz or question not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /quizzes/{id}/finish:
+    post:
+      operationId: finishQuiz
+      tags: [quizzes]
+      summary: Finish a quiz and save its result
+      parameters:
+        - $ref: "#/components/parameters/EntityId"
+      responses:
+        "200":
+          description: Quiz result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizResult"
+        "404":
+          description: Quiz not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /flashcards:
+    get:
+      operationId: listFlashcards
+      tags: [flashcards]
+      summary: List the student's flashcards
+      parameters:
+        - name: dueOnly
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Flashcards.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Flashcard"
+  /flashcards/generate:
+    post:
+      operationId: generateFlashcards
+      tags: [flashcards]
+      summary: Create flashcards from a saved material
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FlashcardGenerationInput"
+      responses:
+        "201":
+          description: Created flashcards.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Flashcard"
+        "400":
+          description: Invalid request or insufficient material text.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /flashcards/{id}/review:
+    patch:
+      operationId: reviewFlashcard
+      tags: [flashcards]
+      summary: Rate a flashcard for spaced review
+      parameters:
+        - $ref: "#/components/parameters/EntityId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FlashcardReviewInput"
+      responses:
+        "200":
+          description: Updated flashcard.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Flashcard"
+        "404":
+          description: Flashcard not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /progress:
+    get:
+      operationId: getProgress
+      tags: [progress]
+      summary: Get learning progress and weak topics
+      responses:
+        "200":
+          description: Progress report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgressReport"
+  /exams:
+    get:
+      operationId: listExams
+      tags: [exams]
+      summary: List upcoming tests and exams
+      responses:
+        "200":
+          description: Upcoming exams.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Exam"
+    post:
+      operationId: createExam
+      tags: [exams]
+      summary: Add an upcoming test or exam
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExamInput"
+      responses:
+        "201":
+          description: Exam saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Exam"
+  /exams/{id}:
+    delete:
+      operationId: deleteExam
+      tags: [exams]
+      summary: Delete an upcoming test or exam
+      parameters:
+        - $ref: "#/components/parameters/EntityId"
+      responses:
+        "204":
+          description: Exam deleted.
+        "404":
+          description: Exam not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /profile:
+    get:
+      operationId: getProfile
+      tags: [profile]
+      summary: Get student settings
+      responses:
+        "200":
+          description: Student profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfile"
+    patch:
+      operationId: updateProfile
+      tags: [profile]
+      summary: Update student settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdate"
+      responses:
+        "200":
+          description: Updated student profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfile"
+  /storage/uploads/request-url:
+    post:
+      operationId: requestUploadUrl
+      tags: [storage]
+      summary: Request a private file upload URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadUrlRequest"
+      responses:
+        "200":
+          description: Upload URL generated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadUrlResponse"
+  /storage/objects/{objectPath}:
+    get:
+      operationId: getStorageObject
+      tags: [storage]
+      summary: Read a private uploaded file
+      parameters:
+        - name: objectPath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Uploaded file content.
+          content:
+            "*/*":
+              schema:
+                type: string
+                format: binary
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    AuthUser:
+      type: object
+      required: [id, email, firstName, lastName, profileImageUrl]
+      properties:
+        id: { type: string }
+        email: { type: [string, "null"], format: email }
+        firstName: { type: [string, "null"] }
+        lastName: { type: [string, "null"] }
+        profileImageUrl: { type: [string, "null"] }
+    AuthUserEnvelope:
+      type: object
+      required: [user]
+      properties:
+        user:
+          oneOf:
+            - $ref: "#/components/schemas/AuthUser"
+            - type: "null"
+    MobileTokenExchangeRequest:
+      type: object
+      required: [code, code_verifier, redirect_uri, state]
+      properties:
+        code: { type: string, minLength: 1 }
+        code_verifier: { type: string, minLength: 1 }
+        redirect_uri: { type: string, format: uri, minLength: 1 }
+        state: { type: string, minLength: 1 }
+        nonce: { type: string, minLength: 1 }
+    MobileTokenExchangeSuccess:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string }
+    LogoutSuccess:
+      type: object
+      required: [success]
+      properties:
+        success: { type: boolean, const: true }
+    StudyMaterial:
+      type: object
+      required: [id, title, subject, fileName, contentType, objectPath, contentText, notes, summary, keyTopics, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        subject: { type: string }
+        fileName: { type: [string, "null"] }
+        contentType: { type: [string, "null"] }
+        objectPath: { type: [string, "null"] }
+        contentText: { type: [string, "null"] }
+        notes: { type: [string, "null"] }
+        summary: { type: [string, "null"] }
+        keyTopics:
+          type: array
+          items: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    MaterialInput:
+      type: object
+      required: [title, subject]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 160 }
+        subject: { type: string, minLength: 1, maxLength: 80 }
+        fileName: { type: [string, "null"] }
+        contentType: { type: [string, "null"] }
+        objectPath: { type: [string, "null"] }
+        contentText: { type: [string, "null"] }
+        notes: { type: [string, "null"] }
+    MaterialUpdate:
+      type: object
+      properties:
+        title: { type: string, minLength: 1, maxLength: 160 }
+        subject: { type: string, minLength: 1, maxLength: 80 }
+        contentText: { type: [string, "null"] }
+        notes: { type: [string, "null"] }
+    MaterialAnalysis:
+      type: object
+      required: [summary, keyTopics, studySuggestion]
+      properties:
+        summary: { type: string }
+        keyTopics:
+          type: array
+          items: { type: string }
+        studySuggestion: { type: string }
+    QuizQuestion:
+      type: object
+      required: [id, prompt, type, choices, topic, userAnswer, isCorrect, explanation]
+      properties:
+        id: { type: string }
+        prompt: { type: string }
+        type: { type: string, enum: [multiple-choice, true-false, open-ended] }
+        choices:
+          type: array
+          items: { type: string }
+        topic: { type: string }
+        userAnswer: { type: [string, "null"] }
+        isCorrect: { type: [boolean, "null"] }
+        explanation: { type: [string, "null"] }
+    QuizSummary:
+      type: object
+      required: [id, title, subject, difficulty, questionCount, scorePercentage, completedAt, createdAt]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        subject: { type: string }
+        difficulty: { type: string, enum: [easy, medium, hard] }
+        questionCount: { type: integer }
+        scorePercentage: { type: [number, "null"] }
+        completedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+    QuizSession:
+      type: object
+      required: [id, title, subject, difficulty, questionCount, scorePercentage, completedAt, createdAt, questions]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        subject: { type: string }
+        difficulty: { type: string, enum: [easy, medium, hard] }
+        questionCount: { type: integer }
+        scorePercentage: { type: [number, "null"] }
+        completedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        questions:
+          type: array
+          items: { $ref: "#/components/schemas/QuizQuestion" }
+    QuizGenerationInput:
+      type: object
+      required: [materialIds, difficulty, questionCount, questionTypes]
+      properties:
+        materialIds:
+          type: array
+          minItems: 1
+          items: { type: integer }
+        difficulty: { type: string, enum: [easy, medium, hard] }
+        questionCount: { type: integer, minimum: 3, maximum: 20 }
+        questionTypes:
+          type: array
+          minItems: 1
+          items: { type: string, enum: [multiple-choice, true-false, open-ended] }
+    QuizAnswerInput:
+      type: object
+      required: [questionId, answer]
+      properties:
+        questionId: { type: string, minLength: 1 }
+        answer: { type: string, minLength: 1, maxLength: 2000 }
+    QuizAnswerFeedback:
+      type: object
+      required: [questionId, isCorrect, correctAnswer, explanation, answeredCount, questionCount]
+      properties:
+        questionId: { type: string }
+        isCorrect: { type: boolean }
+        correctAnswer: { type: string }
+        explanation: { type: string }
+        answeredCount: { type: integer }
+        questionCount: { type: integer }
+    QuizResult:
+      type: object
+      required: [id, scorePercentage, correctCount, questionCount, weakTopics, completedAt]
+      properties:
+        id: { type: integer }
+        scorePercentage: { type: number }
+        correctCount: { type: integer }
+        questionCount: { type: integer }
+        weakTopics:
+          type: array
+          items: { type: string }
+        completedAt: { type: string, format: date-time }
+    Flashcard:
+      type: object
+      required: [id, materialId, materialTitle, question, answer, difficulty, reviewCount, dueAt, updatedAt]
+      properties:
+        id: { type: integer }
+        materialId: { type: integer }
+        materialTitle: { type: string }
+        question: { type: string }
+        answer: { type: string }
+        difficulty: { type: string, enum: [new, easy, hard] }
+        reviewCount: { type: integer }
+        dueAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    FlashcardGenerationInput:
+      type: object
+      required: [materialId, count]
+      properties:
+        materialId: { type: integer }
+        count: { type: integer, minimum: 4, maximum: 30 }
+    FlashcardReviewInput:
+      type: object
+      required: [rating]
+      properties:
+        rating: { type: string, enum: [easy, hard] }
+    Exam:
+      type: object
+      required: [id, title, subject, examDate, createdAt]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        subject: { type: string }
+        examDate: { type: string, format: date }
+        createdAt: { type: string, format: date-time }
+    ExamInput:
+      type: object
+      required: [title, subject, examDate]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 160 }
+        subject: { type: string, minLength: 1, maxLength: 80 }
+        examDate: { type: string, format: date }
+    StudentProfile:
+      type: object
+      required: [displayName, gradeLevel]
+      properties:
+        displayName: { type: string }
+        gradeLevel: { type: [string, "null"] }
+    ProfileUpdate:
+      type: object
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 100 }
+        gradeLevel: { type: [string, "null"], maxLength: 30 }
+    ProgressReport:
+      type: object
+      required: [totalMaterials, totalQuizzes, completedQuizzes, averageScore, studyStreak, flashcardsDue, masteredFlashcards, scoreTrend, weakTopics]
+      properties:
+        totalMaterials: { type: integer }
+        totalQuizzes: { type: integer }
+        completedQuizzes: { type: integer }
+        averageScore: { type: number }
+        studyStreak: { type: integer }
+        flashcardsDue: { type: integer }
+        masteredFlashcards: { type: integer }
+        scoreTrend:
+          type: array
+          items: { $ref: "#/components/schemas/ScorePoint" }
+        weakTopics:
+          type: array
+          items: { $ref: "#/components/schemas/WeakTopic" }
+    ScorePoint:
+      type: object
+      required: [date, score, subject]
+      properties:
+        date: { type: string, format: date }
+        score: { type: number }
+        subject: { type: string }
+    WeakTopic:
+      type: object
+      required: [topic, subject, accuracy, attempts]
+      properties:
+        topic: { type: string }
+        subject: { type: string }
+        accuracy: { type: number }
+        attempts: { type: integer }
+    DashboardSummary:
+      type: object
+      required: [userName, totalMaterials, totalQuizzes, averageScore, studyStreak, flashcardsDue, nextExam, recentMaterials, recentResults, weakTopics, monthlyAiTestsUsed, monthlyAiTestLimit]
+      properties:
+        userName: { type: string }
+        totalMaterials: { type: integer }
+        totalQuizzes: { type: integer }
+        averageScore: { type: number }
+        studyStreak: { type: integer }
+        flashcardsDue: { type: integer }
+        nextExam:
+          oneOf:
+            - $ref: "#/components/schemas/Exam"
+            - type: "null"
+        recentMaterials:
+          type: array
+          items: { $ref: "#/components/schemas/StudyMaterial" }
+        recentResults:
+          type: array
+          items: { $ref: "#/components/schemas/QuizSummary" }
+        weakTopics:
+          type: array
+          items: { $ref: "#/components/schemas/WeakTopic" }
+        monthlyAiTestsUsed: { type: integer }
+        monthlyAiTestLimit: { type: integer }
+    UploadUrlRequest:
+      type: object
+      required: [name, size, contentType]
+      properties:
+        name: { type: string, minLength: 1 }
+        size: { type: integer, minimum: 1 }
+        contentType: { type: string, minLength: 1 }
+    UploadUrlResponse:
+      type: object
+      required: [uploadURL, objectPath]
+      properties:
+        uploadURL: { type: string, format: uri }
+        objectPath: { type: string }
+        metadata:
+          $ref: "#/components/schemas/UploadUrlRequest"
+  parameters:
+    EntityId:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    AuthorizationSessionHeader:
+      name: Authorization
+      in: header
+      required: false
+      schema: { type: string }
+    SessionCookie:
+      name: sid
+      in: cookie
+      required: false
+      schema: { type: string }
 

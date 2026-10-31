@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "StudyPilot"
+description = "A focused AI study assistant for students aged 14–19. StudyPilot organizes uploaded notes, creates practice tests and flashcards, and helps students track progress and weak areas."
+version = "1.0.0"
+id = "artifacts/studypilot"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20782
+
+[services.development]
+run = "pnpm --filter @workspace/studypilot run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/studypilot", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/studypilot/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20782"
+BASE_PATH = "/"

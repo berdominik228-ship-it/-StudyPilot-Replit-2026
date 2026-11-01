@@ -22,6 +22,7 @@ import type {
 import type {
   AuthUserEnvelope,
   BeginBrowserLoginParams,
+  CreateTutorConversationInput,
   DashboardSummary,
   ErrorEnvelope,
   Exam,
@@ -47,8 +48,11 @@ import type {
   QuizResult,
   QuizSession,
   QuizSummary,
+  SendTutorMessageInput,
   StudentProfile,
   StudyMaterial,
+  TutorConversation,
+  TutorConversationSummary,
   UploadUrlRequest,
   UploadUrlResponse
 } from './api.schemas';
@@ -1203,6 +1207,337 @@ export const useAnalyzeMaterial = <TError = ErrorType<ErrorEnvelope>,
         TContext
       > => {
       return useMutation(getAnalyzeMaterialMutationOptions(options));
+    }
+
+export const getListTutorConversationsUrl = () => {
+
+
+
+
+  return `/api/tutor/conversations`
+}
+
+/**
+ * @summary List the student's tutor conversations
+ */
+export const listTutorConversations = async ( options?: Parameters<typeof customFetch>[1]): Promise<TutorConversationSummary[]> => {
+
+  return customFetch<TutorConversationSummary[]>(getListTutorConversationsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListTutorConversationsQueryKey = () => {
+    return [
+    `/api/tutor/conversations`
+    ] as const;
+    }
+
+
+export const getListTutorConversationsQueryOptions = <TData = Awaited<ReturnType<typeof listTutorConversations>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTutorConversations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListTutorConversationsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTutorConversations>>> = ({ signal }) => listTutorConversations({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTutorConversations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListTutorConversationsQueryResult = NonNullable<Awaited<ReturnType<typeof listTutorConversations>>>
+export type ListTutorConversationsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List the student's tutor conversations
+ */
+
+export function useListTutorConversations<TData = Awaited<ReturnType<typeof listTutorConversations>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTutorConversations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListTutorConversationsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateTutorConversationUrl = () => {
+
+
+
+
+  return `/api/tutor/conversations`
+}
+
+/**
+ * @summary Start a tutor conversation and send its first message
+ */
+export const createTutorConversation = async (createTutorConversationInput: CreateTutorConversationInput, options?: Parameters<typeof customFetch>[1]): Promise<TutorConversation> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<TutorConversation>(getCreateTutorConversationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createTutorConversationInput)
+  }
+);}
+
+
+
+
+
+export const getCreateTutorConversationMutationKey = () => ['createTutorConversation'] as const;
+
+export const getCreateTutorConversationMutationOptions = <TError = ErrorType<ErrorEnvelope>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTutorConversation>>, TError,CreateTutorConversationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createTutorConversation>>, TError,CreateTutorConversationMutationVariables, TContext> => {
+
+const mutationKey = getCreateTutorConversationMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTutorConversation>>, CreateTutorConversationMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createTutorConversation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateTutorConversationMutationResult = NonNullable<Awaited<ReturnType<typeof createTutorConversation>>>
+    export type CreateTutorConversationMutationBody = BodyType<CreateTutorConversationInput>
+    export type CreateTutorConversationMutationError = ErrorType<ErrorEnvelope>
+    export type CreateTutorConversationMutationVariables = {data: BodyType<CreateTutorConversationInput>}
+
+    /**
+ * @summary Start a tutor conversation and send its first message
+ */
+export const useCreateTutorConversation = <TError = ErrorType<ErrorEnvelope>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTutorConversation>>, TError,CreateTutorConversationMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createTutorConversation>>,
+        TError,
+        CreateTutorConversationMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateTutorConversationMutationOptions(options));
+    }
+
+export const getGetTutorConversationUrl = (id: number,) => {
+
+
+
+
+  return `/api/tutor/conversations/${id}`
+}
+
+/**
+ * @summary Get a private tutor conversation and its messages
+ */
+export const getTutorConversation = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<TutorConversation> => {
+
+  return customFetch<TutorConversation>(getGetTutorConversationUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTutorConversationQueryKey = (id: number,) => {
+    return [
+    `/api/tutor/conversations/${id}`
+    ] as const;
+    }
+
+
+export const getGetTutorConversationQueryOptions = <TData = Awaited<ReturnType<typeof getTutorConversation>>, TError = ErrorType<ErrorEnvelope>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorConversation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTutorConversationQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTutorConversation>>> = ({ signal }) => getTutorConversation(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTutorConversation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTutorConversationQueryResult = NonNullable<Awaited<ReturnType<typeof getTutorConversation>>>
+export type GetTutorConversationQueryError = ErrorType<ErrorEnvelope>
+
+
+/**
+ * @summary Get a private tutor conversation and its messages
+ */
+
+export function useGetTutorConversation<TData = Awaited<ReturnType<typeof getTutorConversation>>, TError = ErrorType<ErrorEnvelope>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTutorConversation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTutorConversationQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSendTutorMessageUrl = (id: number,) => {
+
+
+
+
+  return `/api/tutor/conversations/${id}/messages`
+}
+
+/**
+ * @summary Send a message and receive a tutor response
+ */
+export const sendTutorMessage = async (id: number,
+    sendTutorMessageInput: SendTutorMessageInput, options?: Parameters<typeof customFetch>[1]): Promise<TutorConversation> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<TutorConversation>(getSendTutorMessageUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(sendTutorMessageInput)
+  }
+);}
+
+
+
+
+
+export const getSendTutorMessageMutationKey = () => ['sendTutorMessage'] as const;
+
+export const getSendTutorMessageMutationOptions = <TError = ErrorType<ErrorEnvelope>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendTutorMessage>>, TError,SendTutorMessageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendTutorMessage>>, TError,SendTutorMessageMutationVariables, TContext> => {
+
+const mutationKey = getSendTutorMessageMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendTutorMessage>>, SendTutorMessageMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  sendTutorMessage(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendTutorMessageMutationResult = NonNullable<Awaited<ReturnType<typeof sendTutorMessage>>>
+    export type SendTutorMessageMutationBody = BodyType<SendTutorMessageInput>
+    export type SendTutorMessageMutationError = ErrorType<ErrorEnvelope>
+    export type SendTutorMessageMutationVariables = {id: number;data: BodyType<SendTutorMessageInput>}
+
+    /**
+ * @summary Send a message and receive a tutor response
+ */
+export const useSendTutorMessage = <TError = ErrorType<ErrorEnvelope>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendTutorMessage>>, TError,SendTutorMessageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendTutorMessage>>,
+        TError,
+        SendTutorMessageMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSendTutorMessageMutationOptions(options));
     }
 
 export const getListQuizzesUrl = () => {

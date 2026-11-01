@@ -12,5 +12,6 @@ export interface QuizResult {
   correctCount: number;
   questionCount: number;
   weakTopics: string[];
+  recommendations: string[];
   completedAt: Date;
 }

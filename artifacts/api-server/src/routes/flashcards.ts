@@ -10,7 +10,7 @@ import {
 import { and, count, eq, lte } from "drizzle-orm";
 import { db, flashcardsTable, materialsTable } from "@workspace/db";
 import { Router, type IRouter, type Request, type Response } from "express";
-import { AiConfigurationError, generateStudyFlashcards } from "../lib/study-ai";
+import { generateStudyFlashcards, publicAiFailure } from "../lib/study-ai";
 import { getStudyMaterialText } from "../lib/study-content";
 
 const router: IRouter = Router();
@@ -116,11 +116,15 @@ router.post(
         ),
       );
     } catch (error) {
-      if (error instanceof AiConfigurationError) {
-        res.status(503).json({ error: error.message });
+      const aiFailure = publicAiFailure(error);
+      if (aiFailure) {
+        res.status(aiFailure.status).json({ error: aiFailure.message });
         return;
       }
-      req.log.warn({ err: error }, "Unable to generate flashcards");
+      req.log.warn(
+        { errorName: error instanceof Error ? error.name : typeof error },
+        "Unable to generate flashcards",
+      );
       res.status(422).json({
         error:
           error instanceof Error

@@ -6,6 +6,7 @@ import materialsRouter from "./materials";
 import quizzesRouter from "./quizzes";
 import flashcardsRouter from "./flashcards";
 import dashboardRouter from "./dashboard";
+import tutorRouter from "./tutor";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(materialsRouter);
 router.use(quizzesRouter);
 router.use(flashcardsRouter);
 router.use(dashboardRouter);
+router.use(tutorRouter);
 
 export default router;

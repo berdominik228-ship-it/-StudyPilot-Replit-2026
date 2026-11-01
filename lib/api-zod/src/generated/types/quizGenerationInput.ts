@@ -17,6 +17,8 @@ export interface QuizGenerationInput {
      * @maximum 20
      */
   questionCount: number;
+  /** @maxLength 120 */
+  topic?: string;
   /** @minItems 1 */
   questionTypes: QuizGenerationInputQuestionTypesItem[];
 }

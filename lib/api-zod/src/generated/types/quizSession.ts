@@ -19,5 +19,6 @@ export interface QuizSession {
   /** @nullable */
   completedAt: Date | null;
   createdAt: Date;
+  recommendations: string[];
   questions: QuizQuestion[];
 }

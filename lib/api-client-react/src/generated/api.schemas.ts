@@ -118,12 +118,94 @@ export interface MaterialAnalysis {
   studySuggestion: string;
 }
 
+export type TutorLanguage = typeof TutorLanguage[keyof typeof TutorLanguage];
+
+
+export const TutorLanguage = {
+  en: 'en',
+  et: 'et',
+  ru: 'ru',
+} as const;
+
+export type TutorLevel = typeof TutorLevel[keyof typeof TutorLevel];
+
+
+export const TutorLevel = {
+  beginner: 'beginner',
+  intermediate: 'intermediate',
+  advanced: 'advanced',
+} as const;
+
+export type TutorMessageRole = typeof TutorMessageRole[keyof typeof TutorMessageRole];
+
+
+export const TutorMessageRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const;
+
+export interface TutorMessage {
+  id: number;
+  role: TutorMessageRole;
+  content: string;
+  createdAt: string;
+}
+
+export interface TutorConversationSummary {
+  id: number;
+  title: string;
+  language: TutorLanguage;
+  level: TutorLevel;
+  /** @nullable */
+  materialId: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TutorConversation {
+  id: number;
+  title: string;
+  language: TutorLanguage;
+  level: TutorLevel;
+  /** @nullable */
+  materialId: number | null;
+  createdAt: string;
+  updatedAt: string;
+  messages: TutorMessage[];
+}
+
+export interface CreateTutorConversationInput {
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  message: string;
+  language: TutorLanguage;
+  level: TutorLevel;
+  /** @nullable */
+  materialId?: number | null;
+}
+
+export interface SendTutorMessageInput {
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  message: string;
+  language?: TutorLanguage;
+  level?: TutorLevel;
+  /** @nullable */
+  materialId?: number | null;
+}
+
 export type QuizQuestionType = typeof QuizQuestionType[keyof typeof QuizQuestionType];
 
 
 export const QuizQuestionType = {
   'multiple-choice': 'multiple-choice',
   'true-false': 'true-false',
+  'short-answer': 'short-answer',
+  math: 'math',
   'open-ended': 'open-ended',
 } as const;
 
@@ -183,6 +265,7 @@ export interface QuizSession {
   /** @nullable */
   completedAt: string | null;
   createdAt: string;
+  recommendations: string[];
   questions: QuizQuestion[];
 }
 
@@ -201,6 +284,8 @@ export type QuizGenerationInputQuestionTypesItem = typeof QuizGenerationInputQue
 export const QuizGenerationInputQuestionTypesItem = {
   'multiple-choice': 'multiple-choice',
   'true-false': 'true-false',
+  'short-answer': 'short-answer',
+  math: 'math',
   'open-ended': 'open-ended',
 } as const;
 
@@ -213,6 +298,8 @@ export interface QuizGenerationInput {
      * @maximum 20
      */
   questionCount: number;
+  /** @maxLength 120 */
+  topic?: string;
   /** @minItems 1 */
   questionTypes: QuizGenerationInputQuestionTypesItem[];
 }
@@ -242,6 +329,7 @@ export interface QuizResult {
   correctCount: number;
   questionCount: number;
   weakTopics: string[];
+  recommendations: string[];
   completedAt: string;
 }
 

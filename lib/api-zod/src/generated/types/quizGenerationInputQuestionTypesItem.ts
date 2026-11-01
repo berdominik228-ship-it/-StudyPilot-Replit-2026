@@ -12,5 +12,7 @@ export type QuizGenerationInputQuestionTypesItem = typeof QuizGenerationInputQue
 export const QuizGenerationInputQuestionTypesItem = {
   'multiple-choice': 'multiple-choice',
   'true-false': 'true-false',
+  'short-answer': 'short-answer',
+  math: 'math',
   'open-ended': 'open-ended',
 } as const;

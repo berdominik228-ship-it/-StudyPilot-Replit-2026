@@ -16,6 +16,8 @@ tags:
     description: Study dashboard summaries
   - name: materials
     description: User study materials
+  - name: tutor
+    description: Private AI tutor conversations
   - name: quizzes
     description: AI-generated practice quizzes and results
   - name: flashcards
@@ -275,6 +277,107 @@ paths:
                 $ref: "#/components/schemas/MaterialAnalysis"
         "404":
           description: Material not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /tutor/conversations:
+    get:
+      operationId: listTutorConversations
+      tags: [tutor]
+      summary: List the student's tutor conversations
+      responses:
+        "200":
+          description: Private tutor conversations.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TutorConversationSummary"
+    post:
+      operationId: createTutorConversation
+      tags: [tutor]
+      summary: Start a tutor conversation and send its first message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTutorConversationInput"
+      responses:
+        "201":
+          description: Conversation and tutor response created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TutorConversation"
+        "400":
+          description: Invalid conversation request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "503":
+          description: OpenAI is not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /tutor/conversations/{id}:
+    get:
+      operationId: getTutorConversation
+      tags: [tutor]
+      summary: Get a private tutor conversation and its messages
+      parameters:
+        - $ref: "#/components/parameters/EntityId"
+      responses:
+        "200":
+          description: Tutor conversation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TutorConversation"
+        "404":
+          description: Conversation not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /tutor/conversations/{id}/messages:
+    post:
+      operationId: sendTutorMessage
+      tags: [tutor]
+      summary: Send a message and receive a tutor response
+      parameters:
+        - $ref: "#/components/parameters/EntityId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendTutorMessageInput"
+      responses:
+        "200":
+          description: Conversation with the new tutor response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TutorConversation"
+        "400":
+          description: Invalid message.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Conversation or material not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "503":
+          description: OpenAI is not configured.
           content:
             application/json:
               schema:
@@ -680,13 +783,68 @@ components:
           type: array
           items: { type: string }
         studySuggestion: { type: string }
+    TutorLanguage:
+      type: string
+      enum: [en, et, ru]
+    TutorLevel:
+      type: string
+      enum: [beginner, intermediate, advanced]
+    TutorMessage:
+      type: object
+      required: [id, role, content, createdAt]
+      properties:
+        id: { type: integer }
+        role: { type: string, enum: [user, assistant] }
+        content: { type: string }
+        createdAt: { type: string, format: date-time }
+    TutorConversationSummary:
+      type: object
+      required: [id, title, language, level, materialId, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        language: { $ref: "#/components/schemas/TutorLanguage" }
+        level: { $ref: "#/components/schemas/TutorLevel" }
+        materialId: { type: [integer, "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    TutorConversation:
+      type: object
+      required: [id, title, language, level, materialId, createdAt, updatedAt, messages]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        language: { $ref: "#/components/schemas/TutorLanguage" }
+        level: { $ref: "#/components/schemas/TutorLevel" }
+        materialId: { type: [integer, "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/TutorMessage" }
+    CreateTutorConversationInput:
+      type: object
+      required: [message, language, level]
+      properties:
+        message: { type: string, minLength: 1, maxLength: 4000 }
+        language: { $ref: "#/components/schemas/TutorLanguage" }
+        level: { $ref: "#/components/schemas/TutorLevel" }
+        materialId: { type: [integer, "null"] }
+    SendTutorMessageInput:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string, minLength: 1, maxLength: 4000 }
+        language: { $ref: "#/components/schemas/TutorLanguage" }
+        level: { $ref: "#/components/schemas/TutorLevel" }
+        materialId: { type: [integer, "null"] }
     QuizQuestion:
       type: object
       required: [id, prompt, type, choices, topic, userAnswer, isCorrect, explanation]
       properties:
         id: { type: string }
         prompt: { type: string }
-        type: { type: string, enum: [multiple-choice, true-false, open-ended] }
+        type: { type: string, enum: [multiple-choice, true-false, short-answer, math, open-ended] }
         choices:
           type: array
           items: { type: string }
@@ -708,7 +866,7 @@ components:
         createdAt: { type: string, format: date-time }
     QuizSession:
       type: object
-      required: [id, title, subject, difficulty, questionCount, scorePercentage, completedAt, createdAt, questions]
+      required: [id, title, subject, difficulty, questionCount, scorePercentage, completedAt, createdAt, recommendations, questions]
       properties:
         id: { type: integer }
         title: { type: string }
@@ -718,6 +876,9 @@ components:
         scorePercentage: { type: [number, "null"] }
         completedAt: { type: [string, "null"], format: date-time }
         createdAt: { type: string, format: date-time }
+        recommendations:
+          type: array
+          items: { type: string }
         questions:
           type: array
           items: { $ref: "#/components/schemas/QuizQuestion" }
@@ -731,10 +892,11 @@ components:
           items: { type: integer }
         difficulty: { type: string, enum: [easy, medium, hard] }
         questionCount: { type: integer, minimum: 3, maximum: 20 }
+        topic: { type: string, maxLength: 120 }
         questionTypes:
           type: array
           minItems: 1
-          items: { type: string, enum: [multiple-choice, true-false, open-ended] }
+          items: { type: string, enum: [multiple-choice, true-false, short-answer, math, open-ended] }
     QuizAnswerInput:
       type: object
       required: [questionId, answer]
@@ -753,13 +915,16 @@ components:
         questionCount: { type: integer }
     QuizResult:
       type: object
-      required: [id, scorePercentage, correctCount, questionCount, weakTopics, completedAt]
+      required: [id, scorePercentage, correctCount, questionCount, weakTopics, recommendations, completedAt]
       properties:
         id: { type: integer }
         scorePercentage: { type: number }
         correctCount: { type: integer }
         questionCount: { type: integer }
         weakTopics:
+          type: array
+          items: { type: string }
+        recommendations:
           type: array
           items: { type: string }
         completedAt: { type: string, format: date-time }

@@ -308,6 +308,117 @@ export const AnalyzeMaterialResponse = zod.object({
 
 
 /**
+ * @summary List the student's tutor conversations
+ */
+export const ListTutorConversationsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "title": zod.string(),
+  "language": zod.enum(['en', 'et', 'ru']),
+  "level": zod.enum(['beginner', 'intermediate', 'advanced']),
+  "materialId": zod.number().int().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListTutorConversationsResponse = zod.array(ListTutorConversationsResponseItem)
+
+
+/**
+ * @summary Start a tutor conversation and send its first message
+ */
+export const createTutorConversationBodyMessageMax = 4000;
+
+
+
+export const CreateTutorConversationBody = zod.object({
+  "message": zod.string().min(1).max(createTutorConversationBodyMessageMax),
+  "language": zod.enum(['en', 'et', 'ru']),
+  "level": zod.enum(['beginner', 'intermediate', 'advanced']),
+  "materialId": zod.number().int().nullish()
+})
+
+export const CreateTutorConversationResponse = zod.object({
+  "id": zod.number().int(),
+  "title": zod.string(),
+  "language": zod.enum(['en', 'et', 'ru']),
+  "level": zod.enum(['beginner', 'intermediate', 'advanced']),
+  "materialId": zod.number().int().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "messages": zod.array(zod.object({
+  "id": zod.number().int(),
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Get a private tutor conversation and its messages
+ */
+
+
+
+export const GetTutorConversationParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+export const GetTutorConversationResponse = zod.object({
+  "id": zod.number().int(),
+  "title": zod.string(),
+  "language": zod.enum(['en', 'et', 'ru']),
+  "level": zod.enum(['beginner', 'intermediate', 'advanced']),
+  "materialId": zod.number().int().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "messages": zod.array(zod.object({
+  "id": zod.number().int(),
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Send a message and receive a tutor response
+ */
+
+
+
+export const SendTutorMessageParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+export const sendTutorMessageBodyMessageMax = 4000;
+
+
+
+export const SendTutorMessageBody = zod.object({
+  "message": zod.string().min(1).max(sendTutorMessageBodyMessageMax),
+  "language": zod.enum(['en', 'et', 'ru']).optional(),
+  "level": zod.enum(['beginner', 'intermediate', 'advanced']).optional(),
+  "materialId": zod.number().int().nullish()
+})
+
+export const SendTutorMessageResponse = zod.object({
+  "id": zod.number().int(),
+  "title": zod.string(),
+  "language": zod.enum(['en', 'et', 'ru']),
+  "level": zod.enum(['beginner', 'intermediate', 'advanced']),
+  "materialId": zod.number().int().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "messages": zod.array(zod.object({
+  "id": zod.number().int(),
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
  * @summary List recent quiz sessions
  */
 export const ListQuizzesResponseItem = zod.object({
@@ -330,6 +441,8 @@ export const ListQuizzesResponse = zod.array(ListQuizzesResponseItem)
 export const generateQuizBodyQuestionCountMin = 3;
 export const generateQuizBodyQuestionCountMax = 20;
 
+export const generateQuizBodyTopicMax = 120;
+
 
 
 
@@ -337,7 +450,8 @@ export const GenerateQuizBody = zod.object({
   "materialIds": zod.array(zod.number().int()).min(1),
   "difficulty": zod.enum(['easy', 'medium', 'hard']),
   "questionCount": zod.number().int().min(generateQuizBodyQuestionCountMin).max(generateQuizBodyQuestionCountMax),
-  "questionTypes": zod.array(zod.enum(['multiple-choice', 'true-false', 'open-ended'])).min(1)
+  "topic": zod.string().max(generateQuizBodyTopicMax).optional(),
+  "questionTypes": zod.array(zod.enum(['multiple-choice', 'true-false', 'short-answer', 'math', 'open-ended'])).min(1)
 })
 
 export const GenerateQuizResponse = zod.object({
@@ -349,10 +463,11 @@ export const GenerateQuizResponse = zod.object({
   "scorePercentage": zod.number().nullable(),
   "completedAt": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date(),
+  "recommendations": zod.array(zod.string()),
   "questions": zod.array(zod.object({
   "id": zod.string(),
   "prompt": zod.string(),
-  "type": zod.enum(['multiple-choice', 'true-false', 'open-ended']),
+  "type": zod.enum(['multiple-choice', 'true-false', 'short-answer', 'math', 'open-ended']),
   "choices": zod.array(zod.string()),
   "topic": zod.string(),
   "userAnswer": zod.string().nullable(),
@@ -381,10 +496,11 @@ export const GetQuizResponse = zod.object({
   "scorePercentage": zod.number().nullable(),
   "completedAt": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date(),
+  "recommendations": zod.array(zod.string()),
   "questions": zod.array(zod.object({
   "id": zod.string(),
   "prompt": zod.string(),
-  "type": zod.enum(['multiple-choice', 'true-false', 'open-ended']),
+  "type": zod.enum(['multiple-choice', 'true-false', 'short-answer', 'math', 'open-ended']),
   "choices": zod.array(zod.string()),
   "topic": zod.string(),
   "userAnswer": zod.string().nullable(),
@@ -440,6 +556,7 @@ export const FinishQuizResponse = zod.object({
   "correctCount": zod.number().int(),
   "questionCount": zod.number().int(),
   "weakTopics": zod.array(zod.string()),
+  "recommendations": zod.array(zod.string()),
   "completedAt": zod.coerce.date()
 })
 

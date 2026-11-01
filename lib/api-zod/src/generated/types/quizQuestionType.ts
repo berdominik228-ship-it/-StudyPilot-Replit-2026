@@ -12,5 +12,7 @@ export type QuizQuestionType = typeof QuizQuestionType[keyof typeof QuizQuestion
 export const QuizQuestionType = {
   'multiple-choice': 'multiple-choice',
   'true-false': 'true-false',
+  'short-answer': 'short-answer',
+  math: 'math',
   'open-ended': 'open-ended',
 } as const;

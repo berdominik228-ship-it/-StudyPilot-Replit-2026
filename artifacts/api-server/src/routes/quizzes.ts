@@ -18,7 +18,11 @@ import {
   type StoredQuizQuestion,
 } from "@workspace/db";
 import { Router, type IRouter, type Request, type Response } from "express";
-import { AiConfigurationError, evaluateOpenAnswer, generateStudyQuiz } from "../lib/study-ai";
+import {
+  evaluateOpenAnswer,
+  generateStudyQuiz,
+  publicAiFailure,
+} from "../lib/study-ai";
 import { getStudyMaterialText } from "../lib/study-content";
 
 const router: IRouter = Router();
@@ -35,6 +39,9 @@ function userIdFor(req: Request, res: Response): string | null {
 function publicQuiz(quiz: typeof quizzesTable.$inferSelect) {
   return {
     ...quiz,
+    recommendations: quiz.completedAt
+      ? recommendationsFor(quiz.scorePercentage, quiz.questions)
+      : [],
     questions: quiz.questions.map((question) => ({
       id: question.id,
       prompt: question.prompt,
@@ -54,6 +61,38 @@ function normalizeAnswer(value: string): string {
     .toLocaleLowerCase()
     .replace(/[.,!?;:'"()[\]{}]/g, "")
     .replace(/\s+/g, " ");
+}
+
+function recommendationsFor(
+  score: number | null,
+  questions: StoredQuizQuestion[],
+): string[] {
+  const weakTopics = [
+    ...new Set(
+      questions
+        .filter((question) => question.isCorrect === false)
+        .map((question) => question.topic),
+    ),
+  ];
+  if (weakTopics.length) {
+    return weakTopics.slice(0, 3).map(
+      (topic) =>
+        `Review ${topic} in your study materials, then try a short practice round.`,
+    );
+  }
+  if ((score ?? 0) >= 90) {
+    return [
+      "Try a harder round or explain one key idea without looking at your notes.",
+    ];
+  }
+  if ((score ?? 0) >= 70) {
+    return [
+      "Review your answers and revisit one key idea from the source material.",
+    ];
+  }
+  return [
+    "Review the key ideas in your study materials before trying another round.",
+  ];
 }
 
 router.get("/quizzes", async (req: Request, res: Response): Promise<void> => {
@@ -129,6 +168,7 @@ router.post(
           .join("\n\n")
           .slice(0, 40_000),
         subject,
+        topic: parsed.data.topic,
         difficulty: parsed.data.difficulty,
         questionCount: parsed.data.questionCount,
         questionTypes: parsed.data.questionTypes,
@@ -150,11 +190,15 @@ router.post(
       }
       res.status(201).json(GenerateQuizResponse.parse(publicQuiz(quiz)));
     } catch (error) {
-      if (error instanceof AiConfigurationError) {
-        res.status(503).json({ error: error.message });
+      const aiFailure = publicAiFailure(error);
+      if (aiFailure) {
+        res.status(aiFailure.status).json({ error: aiFailure.message });
         return;
       }
-      req.log.warn({ err: error }, "Unable to generate study quiz");
+      req.log.warn(
+        { errorName: error instanceof Error ? error.name : typeof error },
+        "Unable to generate study quiz",
+      );
       res.status(422).json({
         error:
           error instanceof Error
@@ -239,21 +283,30 @@ router.post(
       normalizeAnswer(parsed.data.answer) ===
       normalizeAnswer(question.correctAnswer);
     let explanation = question.explanation;
-    if (question.type === "open-ended") {
+    if (
+      question.type === "open-ended" ||
+      question.type === "short-answer" ||
+      question.type === "math"
+    ) {
       try {
         const evaluation = await evaluateOpenAnswer({
           prompt: question.prompt,
           expectedAnswer: question.correctAnswer,
           studentAnswer: parsed.data.answer,
+          questionType: question.type,
         });
         isCorrect = evaluation.isCorrect;
         explanation = evaluation.explanation;
       } catch (error) {
-        if (error instanceof AiConfigurationError) {
-          res.status(503).json({ error: error.message });
+        const aiFailure = publicAiFailure(error);
+        if (aiFailure) {
+          res.status(aiFailure.status).json({ error: aiFailure.message });
           return;
         }
-        req.log.warn({ err: error }, "Unable to evaluate open answer");
+        req.log.warn(
+          { errorName: error instanceof Error ? error.name : typeof error },
+          "Unable to evaluate open answer",
+        );
         res.status(502).json({ error: "The answer could not be checked. Try again." });
         return;
       }
@@ -341,6 +394,7 @@ router.post(
           .map((question) => question.topic),
       ),
     ];
+    const recommendations = recommendationsFor(scorePercentage, quiz.questions);
     res.json(
       FinishQuizResponse.parse({
         id: quiz.id,
@@ -348,6 +402,7 @@ router.post(
         correctCount,
         questionCount: quiz.questionCount,
         weakTopics,
+        recommendations,
         completedAt: updated?.completedAt ?? completedAt,
       }),
     );

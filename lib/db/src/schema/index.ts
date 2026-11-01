@@ -24,3 +24,4 @@ export * from "./flashcards";
 export * from "./exams";
 export * from "./profiles";
 export * from "./upload-intents";
+export * from "./tutor";

@@ -3,10 +3,11 @@ import { and, eq } from "drizzle-orm";
 import { db, materialsTable, type StudyMaterial } from "@workspace/db";
 import { ObjectPermission } from "./objectAcl";
 import { ObjectStorageService } from "./objectStorage";
-import { extractImageText } from "./study-ai";
+import { extractImagePagesText, extractImageText } from "./study-ai";
 
 const objectStorage = new ObjectStorageService();
 const MAX_CONTEXT_LENGTH = 40_000;
+const MAX_SCANNED_PDF_PAGES = 12;
 
 export async function getStudyMaterialText(
   material: StudyMaterial,
@@ -40,12 +41,37 @@ export async function getStudyMaterialText(
     try {
       const result = await parser.getText();
       const text = result.text.trim().slice(0, MAX_CONTEXT_LENGTH);
-      if (!text) {
+      if (text.replace(/\s/g, "").length >= 100) {
+        return cacheExtractedText(material, userId, text);
+      }
+
+      const screenshots = await parser.getScreenshot({
+        first: MAX_SCANNED_PDF_PAGES,
+        desiredWidth: 1100,
+        imageDataUrl: true,
+        imageBuffer: false,
+      });
+      if (screenshots.total > MAX_SCANNED_PDF_PAGES) {
         throw new Error(
-          "No selectable text was found in this PDF. Paste the key notes into the material to continue.",
+          `This scanned PDF has ${screenshots.total} pages. Split it into files of ${MAX_SCANNED_PDF_PAGES} pages or fewer to use OCR.`,
         );
       }
-      return cacheExtractedText(material, userId, text);
+      if (!screenshots.pages.length) {
+        throw new Error(
+          "No readable pages were found in this PDF. Upload a clearer file or paste the key notes.",
+        );
+      }
+      const recognizedText = (
+        await extractImagePagesText(screenshots.pages.map((page) => page.dataUrl))
+      )
+        .trim()
+        .slice(0, MAX_CONTEXT_LENGTH);
+      if (!recognizedText) {
+        throw new Error(
+          "No readable study text was found in this PDF. Upload a clearer scan or paste the key notes.",
+        );
+      }
+      return cacheExtractedText(material, userId, recognizedText);
     } finally {
       await parser.destroy();
     }

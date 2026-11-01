@@ -3,7 +3,12 @@ import { index, integer, jsonb, pgTable, serial, timestamp, varchar } from "driz
 export interface StoredQuizQuestion {
   id: string;
   prompt: string;
-  type: "multiple-choice" | "true-false" | "open-ended";
+  type:
+    | "multiple-choice"
+    | "true-false"
+    | "short-answer"
+    | "math"
+    | "open-ended";
   choices: string[];
   topic: string;
   correctAnswer: string;

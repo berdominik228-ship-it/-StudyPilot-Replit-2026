@@ -15,7 +15,7 @@ import { and, count, desc, eq, gt } from "drizzle-orm";
 import { db, materialsTable, uploadIntentsTable } from "@workspace/db";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { ObjectStorageService } from "../lib/objectStorage";
-import { analyzeStudyText, AiConfigurationError } from "../lib/study-ai";
+import { analyzeStudyText, publicAiFailure } from "../lib/study-ai";
 import { getStudyMaterialText } from "../lib/study-content";
 
 const router: IRouter = Router();
@@ -276,11 +276,15 @@ router.post(
         }),
       );
     } catch (error) {
-      if (error instanceof AiConfigurationError) {
-        res.status(503).json({ error: error.message });
+      const aiFailure = publicAiFailure(error);
+      if (aiFailure) {
+        res.status(aiFailure.status).json({ error: aiFailure.message });
         return;
       }
-      req.log.warn({ err: error }, "Unable to analyze study material");
+      req.log.warn(
+        { errorName: error instanceof Error ? error.name : typeof error },
+        "Unable to analyze study material",
+      );
       res.status(422).json({
         error:
           error instanceof Error
